@@ -1,0 +1,347 @@
+<mvc:View xmlns:mvc="sap.ui.core.mvc" controllerName="kupit.flexiblewf.myinbox.controller.ApproveWfDetail" xmlns="sap.m" xmlns:l="sap.ui.layout" xmlns:f="sap.ui.layout.form" xmlns:core="sap.ui.core" xmlns:rich="sap.ui.richtexteditor" xmlns:html="http://www.w3.org/1999/xhtml">
+   <html:style>
+      .h1style {
+         font-size: 40px;
+      }
+   </html:style>
+    <Page title="Approve Workflow Detail" showHeader="true" showFooter="true" showNavButton="false">
+        <content>
+            <ObjectHeader intro="{i18n>detailSubject}" title="{hanaodata>subject}" icon="" number="" numberUnit="" numberState="None" titleActive="false" backgroundDesign="Translucent" condensed="false" visible="true">
+                <attributes/>
+                <statuses/>
+                <markers/>
+            </ObjectHeader>
+            <IconTabBar expandable="false" expanded="true" applyContentPadding="false" backgroundDesign="Solid" upperCase="false" visible="true" selectedKey="Ok">
+                <items>
+                    <IconTabFilter icon="sap-icon://hint" iconColor="Positive" text="Content" count="" design="Vertical" showAll="false" textDirection="Inherit" enabled="true" visible="true" iconDensityAware="false">
+                        <content>
+                            <f:Form id="FormDisplayComment"
+                                editable="false">
+                                <!--<f:title>
+                                    <core:Title text="Address" />
+                                </f:title>-->
+                                <f:layout>
+                                    <f:ResponsiveGridLayout
+                                        labelSpanXL="1"
+                                        labelSpanL="1"
+                                        labelSpanM="1"
+                                        labelSpanS="12"
+                                        adjustLabelSpan="false"
+                                        emptySpanXL="1"
+                                        emptySpanL="1"
+                                        emptySpanM="1"
+                                        emptySpanS="0"
+                                        columnsXL="1"
+                                        columnsL="1"
+                                        columnsM="1"
+                                        singleContainerFullSize="true" />
+                                </f:layout>
+                                <f:formContainers>
+                                    <f:FormContainer>
+                                        <f:formElements>
+                                            <f:FormElement label="{i18n>detailAdditionalInfo}">
+                                                <f:fields>
+                                                    <HBox width="100%" alignContent="Center" alignItems="Center" justifyContent="Center">
+
+                                                        <TextArea value="{hanaodata>additionalInfo}" rows="10" cols="100" maxLength="0" wrapping="None" enabled="false" required="false" valueStateText="Invalid entry" visible="true"/>
+                                                    </HBox>
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>detailFullDescription}">
+                                                <f:fields>
+                                                    <HBox width="100%" alignContent="Center" alignItems="Center" justifyContent="Center">
+
+                                                        <rich:RichTextEditor value="{hanaodata>fullDescription}" width="100%" editable="false" >
+                                                            <rich:layoutData>
+                                                                <FlexItemData growFactor="1" />
+                                                            </rich:layoutData>
+                                                        
+                                                        </rich:RichTextEditor>
+                                                        <!--<TextArea value="{hanaodata>comment}" rows="10" cols="100" maxLength="0" wrapping="None" enabled="false" required="false" valueStateText="Invalid entry" visible="true"/>-->
+                                                    </HBox>
+
+                                    
+                                                </f:fields>
+                                            </f:FormElement>
+                                        </f:formElements>
+                                    </f:FormContainer>
+                                </f:formContainers>
+                            </f:Form>
+
+                        </content>
+                    </IconTabFilter>
+                    <IconTabSeparator icon="" iconDensityAware="false"/>
+                    <IconTabFilter id="approveWFAttachmentsTab" icon="sap-icon://attachment" iconColor="Neutral" text="Attachments" count="{/approveWFAttachmentsCount}" design="Vertical" showAll="false" textDirection="Inherit" enabled="true" visible="true" iconDensityAware="false">
+                        <content>
+                            <Table id="approveWFAttachmentsTable" items="{hanaodata>ToAttachments}" width="auto" noDataText="No data" mode="None" showSeparators="All" growing="true" growingThreshold="20" growingScrollToLoad="true" class="sapUiResponsiveMargin">
+                                <infoToolbar>
+                                    <Toolbar width="100%" height="auto" design="Auto" visible="false" enabled="true">
+                                        <content>
+                                            <Label text="Label" design="Standard" width="100%" required="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </content>
+                                    </Toolbar>
+                                </infoToolbar>
+                                <headerToolbar>
+                                    <OverflowToolbar width="auto" height="auto" design="Transparent" visible="true" enabled="true">
+                                        <content>
+                                            <Title text="Files" titleStyle="Auto" width="auto" textAlign="Begin" visible="true" wrapping="false"/>
+                                            <ToolbarSpacer width=""/>
+                                            <OverflowToolbarButton press="_onAttachmentButtonPress" text="Settings" type="Transparent" icon="sap-icon://add" iconFirst="true" width="auto" enabled="{/toBeApproved}" visible="true" iconDensityAware="false"/>
+                                        </content>
+                                    </OverflowToolbar>
+                                </headerToolbar>
+                                <columns>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Phone" demandPopin="false" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="File" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Description" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem type="Active">
+                                        <cells>
+                                            <HBox>
+                                                <Button press="onDeleteAttachment" text="" type="Default" icon="sap-icon://delete" iconFirst="true" width="auto" enabled="{/toBeApproved}" visible="true" iconDensityAware="false"/>
+                                                <Button press="onDownloadAttachment" text="" type="Default" icon="sap-icon://download" iconFirst="true" width="auto" enabled="true" visible="true" iconDensityAware="false"/>
+                                            </HBox>
+                                            <ObjectIdentifier title="{hanaodata>filename}" text="" titleActive="false" visible="true"/>
+                                            <VBox>
+                                            <Text text="{hanaodata>description}" width="auto" maxLines="0" wrapping="true" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Text text="{hanaodata>size} Bytes {path:'hanaodata>createdAt', type: 'sap.ui.model.odata.type.DateTime', formatOptions: { pattern: 'dd/MM/yyyy HH:MM:ss' } }" width="auto" maxLines="0" wrapping="true" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            </VBox>
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </content>
+                    </IconTabFilter>
+                    <IconTabSeparator icon="" iconDensityAware="false"/>
+                    <IconTabFilter icon="sap-icon://person-placeholder" iconColor="Neutral" text="Approvers" count="" design="Vertical" showAll="false" textDirection="Inherit" enabled="true" visible="true" iconDensityAware="false">
+                        <content>
+                            <Table items="{ path: 'hanaodata>ToApprovers' , templateShareable:true ,filters : [ {  path: 'level', operator : 'EQ', value1: 1 } ] }" id="approveWFApprovers1Table" width="auto" noDataText="No data" mode="None" showSeparators="All" growing="true" growingThreshold="20" growingScrollToLoad="true" class="sapUiResponsiveMargin">
+                                <infoToolbar>
+                                    <Toolbar width="100%" height="auto" design="Auto" visible="false" enabled="true">
+                                        <content>
+                                            <Label text="Label" design="Standard" width="100%" required="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </content>
+                                    </Toolbar>
+                                </infoToolbar>
+                                <headerToolbar>
+                                    <OverflowToolbar width="auto" height="auto" design="Transparent" visible="true" enabled="true">
+                                        <content>
+                                            <Title text="1st level approvers" titleStyle="Auto" width="auto" textAlign="Begin" visible="true" wrapping="false"/>
+                                            <ToolbarSpacer width=""/>
+                                            <Button text="" type="Default" icon="sap-icon://add" iconFirst="true" width="auto" enabled="{/workflowDraft}" visible="true" iconDensityAware="false" press="_onNewApprover1ButtonPress"/>
+                                        </content>
+                                    </OverflowToolbar>
+                                </headerToolbar>
+                                <columns>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Approver" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Middle" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Position" width="auto" maxLines="0" wrapping="true" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Status" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Approval Date" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column visible="{/workflowDraft}" width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem type="Active">
+                                        <cells>
+                                            <Text text="{hanaodata>name} {hanaodata>surname}" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Text text="{hanaodata>Descrizione_Posizione}" width="auto" maxLines="0" wrapping="true" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Text text="{path: 'hanaodata>status'}" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Text text="{path: 'hanaodata>status_date', type: 'sap.ui.model.odata.type.DateTime', formatOptions: { pattern: 'dd/MM/yyyy HH:mm:ss' } }" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Button text="" type="Emphasized" icon="sap-icon://delete" iconFirst="true" width="auto" enabled="{/workflowDraft}" visible="{/workflowDraft}" iconDensityAware="false" press="onDeleteApprover1"/>
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                            <Table items="{ path: 'hanaodata>ToApprovers' , templateShareable:true ,filters : [ {  path: 'level', operator : 'EQ', value1: 2 } ] }" id="approveWFApprovers2Table" width="auto" noDataText="No data" mode="None" showSeparators="All" growing="true" growingThreshold="20" growingScrollToLoad="true" class="sapUiResponsiveMargin">
+                                <infoToolbar>
+                                    <Toolbar width="100%" height="auto" design="Auto" visible="false" enabled="true">
+                                        <content>
+                                            <Label text="Label" design="Standard" width="100%" required="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </content>
+                                    </Toolbar>
+                                </infoToolbar>
+                                <headerToolbar>
+                                    <OverflowToolbar width="auto" height="auto" design="Transparent" visible="true" enabled="true">
+                                        <content>
+                                            <Title text="2nd level approvers" titleStyle="Auto" width="auto" textAlign="Begin" visible="true" wrapping="false"/>
+                                            <ToolbarSpacer width=""/>
+                                            <Button text="" type="Default" icon="sap-icon://add" iconFirst="true" width="auto" enabled="{/workflowDraft}" visible="true" iconDensityAware="false" press="_onNewApprover2ButtonPress"/>
+                                        </content>
+                                    </OverflowToolbar>
+                                </headerToolbar>
+                                <columns>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Approver" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Middle" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Position" width="auto" maxLines="0" wrapping="true" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Status" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Approval Date" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column visible="{/workflowDraft}" width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                </columns>
+                                <items>
+                                   <ColumnListItem type="Active">
+                                        <cells>
+                                            <Text text="{hanaodata>name} {hanaodata>surname}" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Text text="{hanaodata>Descrizione_Posizione}" width="auto" maxLines="0" wrapping="true" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Text text="{path: 'hanaodata>status'}" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Text text="{path: 'hanaodata>status_date', type: 'sap.ui.model.odata.type.DateTime', formatOptions: { pattern: 'dd/MM/yyyy HH:mm:ss' } }" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Button text="" type="Emphasized" icon="sap-icon://delete" iconFirst="true" width="auto" enabled="true" visible="{/workflowDraft}" iconDensityAware="false" press="onDeleteApprover2"/>
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                            <Table items="{ path: 'hanaodata>ToApprovers' , templateShareable:true ,filters : [ {  path: 'level', operator : 'EQ', value1: 3 } ] }" id="approveWFApprovers3Table" width="auto" noDataText="No data" mode="None" showSeparators="All" growing="true" growingThreshold="20" growingScrollToLoad="true" class="sapUiResponsiveMargin">
+                                <infoToolbar>
+                                    <Toolbar width="100%" height="auto" design="Auto" visible="false" enabled="true">
+                                        <content>
+                                            <Label text="Label" design="Standard" width="100%" required="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </content>
+                                    </Toolbar>
+                                </infoToolbar>
+                                <headerToolbar>
+                                    <OverflowToolbar width="auto" height="auto" design="Transparent" visible="true" enabled="true">
+                                        <content>
+                                            <Title text="3rd level approvers" titleStyle="Auto" width="auto" textAlign="Begin" visible="true" wrapping="false"/>
+                                            <ToolbarSpacer width=""/>
+                                            <Button text="" type="Default" icon="sap-icon://add" iconFirst="true" width="auto" enabled="{/workflowDraft}" visible="true" iconDensityAware="false" press="_onNewApprover3ButtonPress"/>
+                                        </content>
+                                    </OverflowToolbar>
+                                </headerToolbar>
+                                <columns>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Approver" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Middle" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Position" width="auto" maxLines="0" wrapping="true" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Status" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                            <Text text="Approval Date" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                    <Column visible="{/workflowDraft}" width="auto" hAlign="Left" vAlign="Top" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" mergeDuplicates="false">
+                                        <header>
+                                        </header>
+                                        <footer/>
+                                    </Column>
+                                </columns>
+                                <items>
+                                   <ColumnListItem type="Active">
+                                        <cells>
+                                            <Text text="{hanaodata>name} {hanaodata>surname}" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Text text="{hanaodata>Descrizione_Posizione}" width="auto" maxLines="0" wrapping="true" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Text text="{path: 'hanaodata>status'}" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Text text="{path: 'hanaodata>status_date', type: 'sap.ui.model.odata.type.DateTime', formatOptions: { pattern: 'dd/MM/yyyy HH:mm:ss' } }" width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                                            <Button text="" type="Emphasized" icon="sap-icon://delete" iconFirst="true" width="auto" enabled="true" visible="{/workflowDraft}" iconDensityAware="false" press="onDeleteApprover3"/>
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </content>
+                    </IconTabFilter>
+                    <IconTabFilter icon="sap-icon://comment" iconColor="Neutral" text="Comments" count="" design="Vertical" showAll="false" textDirection="Inherit" enabled="true" visible="true" iconDensityAware="false">
+                        <content>
+                            <FeedInput value="{/approveFeedInputValue}" showIcon="true" icon="" placeholder="Post something here" enabled="{/toBeApproved}" visible="true" maxLength="0" buttonTooltip="Submit" post="onPostComment" />
+                            <List items="{ path: 'hanaodata>ToComments' , templateShareable:true  }" id="approveWFCommentsTable" width="100%" growing="false" growingThreshold="20" growingScrollToLoad="false" backgroundDesign="Solid" >
+                                <items>
+                                    <FeedListItem icon="" sender="{hanaodata>createdBy}" text="{hanaodata>text}" info="Comment" timestamp="{path: 'hanaodata>createdAt', type: 'sap.ui.model.odata.type.DateTime', formatOptions: { pattern: 'dd/MM/yyyy hh:mm:ss' } }"/>
+                                </items>
+                            </List>
+                        </content>
+                    </IconTabFilter>
+                </items>
+                <content>
+                    <Text text="Tab Bar Content goes here ..." width="auto" maxLines="1" wrapping="false" textAlign="Begin" textDirection="Inherit" visible="true"/>
+                </content>
+            </IconTabBar>
+        </content>
+        <footer>
+            <OverflowToolbar id="approverActionToolbar" width="100%" height="46px" design="Auto" enabled="true" visible="true">
+                <content>
+                    <Button text="Log Download" press="downloadPdf"/>
+                    <!--<Button text="Test" press="onTestSendTeams"/>-->
+                    <!--<Button text="Test" press="onTestSendWD"/>-->
+                    <ToolbarSpacer width=""/>
+                    <Button text="Approve" press="onApproveTask" type="Emphasized" iconFirst="true" width="auto" enabled="{/taskPending}" visible="true" iconDensityAware="false"/>
+                    <Button text="Reject" press="onRejectTask" type="Default" iconFirst="true" width="auto" enabled="{/taskPending}" visible="true" iconDensityAware="false"/>
+                    <Button text="Send" press="onSendWorkflow" type="Emphasized" iconFirst="true" width="auto" enabled="{/workflowDraft}" visible="true" iconDensityAware="false"/>
+                </content>
+            </OverflowToolbar>
+        </footer>
+        <headerContent/>
+    </Page>
+</mvc:View>

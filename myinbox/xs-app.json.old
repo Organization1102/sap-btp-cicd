@@ -1,0 +1,117 @@
+{
+  "welcomeFile": "/index.html",
+  "authenticationMethod": "route",
+  "routes": [
+    {
+      "source": "^/bpmworkflowruntime/(.*)$",
+      "target": "/public/workflow/rest/$1",
+      "service": "com.sap.spa.processautomation",
+      "endpoint": "api",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/bpmworkflowruntimeodata/(.*)$",
+      "target": "/public/workflow/odata/$1",
+      "service": "com.sap.spa.processautomation",
+      "endpoint": "api",
+      "authenticationType": "xsuaa"
+    },
+    {
+      "source": "^/docservice/(.*)$",
+      "target": "$1",
+      "authenticationType": "none",
+      "destination": "DMS_Destination"
+    },
+    {
+      "source": "^/user-api(.*)",
+      "target": "$1",
+      "authenticationType": "none",
+      "destination": "ADGroupMembersReadGraph"
+    },
+    {
+      "source": "^/user-info/currentUser",
+      "target": "/currentUser",
+      "service": "sap-approuter-userapi"
+    },
+    {
+      "source": "^/hana/(.*)$",
+      "target": "/$1",
+      "authenticationType": "xsuaa",
+      "destination": "kupit-flexiblewf-cap-srv"
+    },
+    {
+      "source": "^/workdaycpi/(.*)$",
+      "target": "/$1",
+      "authenticationType": "none",
+      "destination": "WORKDAY_CPI"
+    },
+    {
+      "source": "^/resources/(.*)$",
+      "target": "/resources/$1",
+      "authenticationType": "none",
+      "destination": "ui5"
+    },
+    {
+      "source": "^/test-resources/(.*)$",
+      "target": "/test-resources/$1",
+      "authenticationType": "none",
+      "destination": "ui5"
+    },
+    {
+      "source": "^(.*)$",
+      "target": "$1",
+      "service": "html5-apps-repo-rt",
+      "authenticationType": "xsuaa"
+    }
+  ],
+  "responseHeaders":[
+    {
+      "name": "Content-Security-Policy",
+      "value": "frame-ancestors 'self' *.ondemand.com" 
+    },
+    {
+      "name": "X-Frame-Options",
+      "value": "ALLOW-FROM cf-common-dev-o0i06yh6.launchpad.cfapps.eu10.hana.ondemand.com"
+    },
+    {
+      "name": "X-Frame-Options",
+      "value": "ALLOW-FROM btp-test-orks5mp6.launchpad.cfapps.eu10.hana.ondemand.com"
+    },
+    {
+      "name": "X-Frame-Options",
+      "value": "ALLOW-FROM btp-live-igfchy05.launchpad.cfapps.eu10.hana.ondemand.com"
+    }
+  ],
+  "cors":[
+    {
+      "uriPattern": "^(.*)$",
+      "allowedMethods": [
+        "GET"
+      ],
+      "allowedOrigin": [
+        {
+          "host": "cf-common-dev-o0i06yh6.launchpad.cfapps.eu10.hana.ondemand.com",
+          "protocol": "https",
+          "port": 345
+        },
+        {
+          "host": "btp-test-orks5mp6.launchpad.cfapps.eu10.hana.ondemand.com",
+          "protocol": "https",
+          "port": 345
+        },
+        {
+          "host": "btp-live-igfchy05.launchpad.cfapps.eu10.hana.ondemand.com",
+          "protocol": "https",
+          "port": 345
+        }
+      ],
+      "maxAge": 3600,
+      "allowedHeaders": [
+        "Authorization",
+        "Content-Type"
+      ],
+      "allowedCredentials": true
+    }
+  ]
+}

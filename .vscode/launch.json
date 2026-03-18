@@ -1,0 +1,83 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "myinbox-config1",
+      "cwd": "${workspaceFolder}/myinbox",
+      "runtimeArgs": [
+        "fiori",
+        "run"
+      ],
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npx",
+      "args": [
+        "--open",
+        "testFLPService.html"
+      ],
+      "windows": {
+        "runtimeExecutable": "npx.cmd"
+      },
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart",
+      "outputCapture": "std",
+      "env": {
+        "run.config": "{\"handlerId\":\"fiori_tools\",\"runnableId\":\"/home/user/projects/kupit-flexiblewf-mta/myinbox\"}",
+        "FIORI_TOOLS_BACKEND_CONFIG": "[{\"path\":\"/docservice\",\"pathPrefix\":\"/\",\"destination\":\"doc_service_dest\"},{\"path\":\"/bpmworkflowruntime\",\"pathPrefix\":\"/\",\"destination\":\"bpmworkflowruntimedest_MB\"},{\"path\":\"/bpmworkflowruntimeodata\",\"pathPrefix\":\"/\",\"destination\":\"bpmworkflowruntimeodatadest_MB\"},{\"path\":\"/hana\",\"pathPrefix\":\"/\",\"destination\":\"kupit-flexiblewf-cap-srv\"},{\"path\":\"/workdaycpi\",\"pathPrefix\":\"/\",\"destination\":\"WORKDAY_CPI_MB\"},{\"path\":\"/user-api\",\"pathPrefix\":\"/\",\"destination\":\"ADGroupMembersReadGraph\"}]",
+        "FIORI_TOOLS_URL_PARAMS": "sap-ui-xx-viewCache=false"
+      }
+    },
+    {
+      "name": "myinbox-config2",
+      "cwd": "${workspaceFolder}/myinbox",
+      "runtimeArgs": [
+        "fiori",
+        "run"
+      ],
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npx",
+      "args": [
+        "--open",
+        "index.html"
+      ],
+      "windows": {
+        "runtimeExecutable": "npx.cmd"
+      },
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart",
+      "outputCapture": "std",
+      "env": {
+        "run.config": "{\"handlerId\":\"fiori_tools\",\"runnableId\":\"/home/user/projects/UI5/myinbox\"}",
+        "FIORI_TOOLS_BACKEND_CONFIG": "[{\"path\":\"/docservice\",\"pathPrefix\":\"/\",\"destination\":\"doc_service_dest\"},{\"path\":\"/bpmworkflowruntime\",\"pathPrefix\":\"/\",\"destination\":\"bpmworkflowruntimedest_MB\"},{\"path\":\"/bpmworkflowruntimeodata\",\"pathPrefix\":\"/\",\"destination\":\"bpmworkflowruntimeodatadest_MB\"},{\"path\":\"/hana\",\"pathPrefix\":\"/\",\"destination\":\"kupit-flexiblewf-cap-srv_MB\"},{\"path\":\"/workdaycpi\",\"pathPrefix\":\"/\",\"destination\":\"WORKDAY_CPI_MB\"},{\"path\":\"/user-api\",\"pathPrefix\":\"/\",\"destination\":\"kupit_flexiblewf_xsuaa_MB\"}]",
+        "FIORI_TOOLS_URL_PARAMS": "sap-ui-xx-viewCache=false&dmsObjectId=cced45800051661196a47846&dmsRepositoryId=ca9d9a8e-9e11-4c84-8cd9-50b61f5d0048"
+      }
+    },
+    {
+      "name": "docmanage-config1",
+      "cwd": "${workspaceFolder}/docmanage",
+      "runtimeArgs": [
+        "fiori",
+        "run"
+      ],
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npx",
+      "args": [
+        "--open",
+        "testFLPService.html"
+      ],
+      "windows": {
+        "runtimeExecutable": "npx.cmd"
+      },
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart",
+      "outputCapture": "std",
+      "env": {
+        "run.config": "{\"handlerId\":\"fiori_tools\",\"runnableId\":\"/home/user/projects/kupit_flexiblewf_apps/docmanage\"}",
+        "FIORI_TOOLS_BACKEND_CONFIG": "[{\"path\":\"/comsapecmreuse.comsapecmreusedocumentTable/api\",\"pathPrefix\":\"/\",\"destination\":\"doc_service_dest\"},{\"path\":\"/comsapecmreuse.comsapecmreusedocumentTable/api/office\",\"pathPrefix\":\"/office\",\"xfwd\":true,\"url\":\"https://api-sdm-di.cfapps.eu10.hana.ondemand.com\",\"destination\":\"doc_service_dest\"}]",
+        "FIORI_TOOLS_URL_PARAMS": "sap-ui-xx-viewCache=false"
+      }
+    }
+  ]
+}
