@@ -1,0 +1,157 @@
+_schema-version: "3.2"
+ID: kupit-flexiblewf-mta
+version: 0.0.5
+build-parameters:
+  before-all:
+    - builder: custom
+    # CDM copy to resources folder #################################
+      commands:
+        - mkdir -p resources
+    #    - cp workzone/cdm.json resources/cdm.json
+    ################################################################
+modules:
+- name: kupit-flexiblewf-destination-content
+  type: com.sap.application.content
+  requires: 
+  - name: kupit-flexiblewf-destination-service
+    parameters:
+      content-target: true
+  - name: kupit-flexiblewf_html_repo_host
+    parameters:
+      service-key:
+        name: kupit-flexiblewf_html_repo_host-key
+  - name: kupit-flexiblewf_html_repo_runtime
+    parameters:
+      service-key: 
+         name: kupit-flexiblewf-html5-app-runtime-key
+  - name: kupit-flexiblewf-mta-auth
+    parameters:
+      service-key:
+        name: uaa_kupit-flexiblewf-mta-key
+  - name: kupit-flexiblewf-cap-auth
+    parameters:
+      service-key:
+        name: uaa_kupit-flexiblewf-mta-key
+  - name: kupit_flexiblewf_workflow
+    parameters:
+      service-key:
+        name: uaa_kupit-flexiblewf-mta-key
+  parameters:
+    stack: cflinuxfs4
+    content:
+      instance:
+        destinations:
+        - Name: kupit_flexiblewf_app_kupit_flexiblewf_mta_html_repo_host
+          ServiceInstanceName: kupit-flexiblewf-html5-app-host-service
+          ServiceKeyName: kupit-flexiblewf_html_repo_host-key
+          sap.cloud.service: kupit-flexiblewf-app
+        - Authentication: OAuth2UserTokenExchange
+          Name: kupit_flexiblewf_app_uaa_kupit_flexiblewf_mta
+          ServiceInstanceName: kupit-flexiblewf-mta-auth
+          ServiceKeyName: uaa_kupit-flexiblewf-mta-key
+          sap.cloud.service: kupit-flexiblewf-app   
+        - Authentication: OAuth2UserTokenExchange
+          Name: kupit_flexiblewf_app_uaa_kupit_flexiblewf_cap
+          ServiceInstanceName: kupit-flexiblewf-cap-auth
+          ServiceKeyName: uaa_kupit-flexiblewf-mta-key  
+        - Authentication: OAuth2UserTokenExchange
+          Name: kupit_flexiblewf_wf_uaa_kupit_flexiblewf_mta
+          ServiceInstanceName: kupit_flexiblewf_workflow
+          ServiceKeyName: uaa_kupit-flexiblewf-mta-key   
+        existing_destinations_policy: update
+      subaccount:
+        destinations:
+        - Name: flexiblewf_cdm
+          ServiceInstanceName: kupit-flexiblewf-html5-app-runtime-service
+          ServiceKeyName: kupit-flexiblewf-html5-app-runtime-key
+          URL: https://html5-apps-repo-rt.cfapps.eu10.hana.ondemand.com/applications/cdm/kupit-flexiblewf-app
+        existing_destinations_policy: update
+  build-parameters:
+    no-source: true
+- name: kupit-flexiblewf-app-content
+  type: com.sap.application.content
+  path: .
+  requires:
+  - name: kupit-flexiblewf-mta-auth
+  - name: kupit-flexiblewf_html_repo_host
+    parameters:
+      content-target: true
+  build-parameters:
+    build-result: resources
+    requires:
+    - artifacts:
+      - kupitflexiblewfmyinbox.zip
+      name: kupitflexiblewfmyinbox
+      target-path: resources/
+- name: kupitflexiblewfmyinbox
+  type: html5
+  path: myinbox
+  build-parameters:
+    build-result: dist
+    builder: custom
+    commands:
+    - npm install
+    - npm run build:cf
+    supported-platforms: []
+resources:
+# HTML5 app-runtime resource for CDM DT destination ######################
+- name: kupit-flexiblewf_html_repo_runtime
+  type: org.cloudfoundry.managed-service
+  parameters:
+    service: html5-apps-repo
+    service-name: kupit-flexiblewf-html5-app-runtime-service
+    service-plan: app-runtime
+###########################################################################
+- name: kupit-flexiblewf-destination-service
+  type: org.cloudfoundry.managed-service
+  parameters:
+    config:
+      HTML5Runtime_enabled: true
+      init_data:
+        instance:
+          destinations:
+          - Authentication: NoAuthentication
+            Name: ui5
+            ProxyType: Internet
+            Type: HTTP
+            URL: https://ui5.sap.com
+          existing_destinations_policy: update
+        subaccount:
+          destinations:
+          - Authentication: NoAuthentication
+            Name: flexiblewfcdm-rt
+            ProxyType: Internet
+            Type: HTTP
+            URL: https://cf-kupit-dev-yy6gs83h.launchpad.cfapps.eu10.hana.ondemand.com
+          existing_destinations_policy: update
+      version: 1.0.0
+    service: destination
+    service-name: kupit-flexiblewf-destination-service
+    service-plan: lite
+- name: kupit-flexiblewf_html_repo_host
+  type: org.cloudfoundry.managed-service
+  parameters:
+    service: html5-apps-repo
+    service-name: kupit-flexiblewf-html5-app-host-service
+    service-plan: app-host
+- name: kupit-flexiblewf-mta-auth
+  type: org.cloudfoundry.managed-service
+  parameters:
+    path: ./xs-security.json
+    service: xsuaa
+    service-name: kupit-flexiblewf-mta-auth
+    service-plan: application
+- name: kupit-flexiblewf-cap-auth
+  type: org.cloudfoundry.existing-service
+  parameters:
+    service: xsuaa
+    service-name: kupit-flexiblewf-cap-auth
+    service-plan: application
+- name: kupit_flexiblewf_workflow
+  type: org.cloudfoundry.existing-service
+  parameters:
+    service-plan: standard
+    service-name: kupit_flexiblewf_workflow
+    service: process-automation-service
+parameters:
+  deploy_mode: html5-repo

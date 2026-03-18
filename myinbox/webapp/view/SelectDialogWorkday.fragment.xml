@@ -1,0 +1,7 @@
+<core:FragmentDefinition xmlns:core="sap.ui.core" controllerName="kupit.flexiblewf.myinbox.controller.SelectDialogWorkday" xmlns="sap.m">
+    <SelectDialog items="{/UtentiWorkday}" id="sap_m_SelectDialogWorkday" title="Select User" growingThreshold="100" >
+        <items>
+            <StandardListItem icon="sap-icon://notes" title="{path: 'wd:ID_Posizione' }" description="{Nome} {Cognome}" info="{path: 'wd:Descrizione_Posizione'}" infoState="None"/>
+        </items>
+    </SelectDialog>
+</core:FragmentDefinition>

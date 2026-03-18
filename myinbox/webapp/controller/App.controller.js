@@ -1,0 +1,54 @@
+/* global cmis:true */
+sap.ui.define([
+		"kupit/flexiblewf/myinbox/controller/BaseController",
+		"sap/ui/model/json/JSONModel",
+		"sap/ui/core/routing/History",
+		"../lib/cmis",
+		"../lib/purify.min",
+		"../lib/jspdf.umd.min",
+		"../lib/html2canvas.min",
+		"../lib/download.min",
+		"../lib/jquery.xml2json"
+	], function (BaseController, JSONModel, History, cmislib, purify, jspdf, html2canvas, download, jqueryxml2json) {
+		"use strict";
+
+		return BaseController.extend("kupit.flexiblewf.myinbox.controller.App", {
+
+			onInit : function () {
+				var oViewModel,
+					oListSelector = this.getOwnerComponent().oListSelector,
+					iOriginalBusyDelay = this.getView().getBusyIndicatorDelay();
+
+				oViewModel = new JSONModel({
+					busy : true,
+					delay : 0
+				});
+				this.setModel(oViewModel, "appView");
+
+                // Makes sure that master view is hidden in split app
+                // after a new list entry has been selected.
+                oListSelector.attachListSelectionChange(function () {
+                    this.byId("idAppControl").hideMaster();
+                }, this);
+
+                // apply content density mode to root view
+                this.getView().addStyleClass(this.getOwnerComponent().getContentDensityClass());
+            
+                new Promise(function (fnResolve) {
+                    
+                    var oModel, aPromises = [];
+                        oModel = this.getOwnerComponent().getModel();
+                        aPromises.push(oModel.metadataLoaded);
+                    return Promise.all(aPromises).then(function () {
+                        oViewModel.setProperty("/busy", false);
+                        oViewModel.setProperty("/delay", iOriginalBusyDelay);
+                        fnResolve();
+                    });
+                }.bind(this));
+			},
+			setMode: function (sMode) {
+			    this.byId("idAppControl").setMode(sMode);
+			}
+		});
+	}
+);
