@@ -1,1 +1,573 @@
-// Place here the jenkinsfile
+def runCmd(unixCmd, winCmd) {
+  if (isUnix()) {
+    sh unixCmd
+  } else {
+    powershell winCmd
+  }
+}
+
+pipeline {
+  agent any
+
+  tools {
+    nodejs 'NodeJS_20'
+  }
+
+  options {
+    timestamps()
+    ansiColor('xterm')
+    disableConcurrentBuilds()
+    skipDefaultCheckout(true)
+  }
+
+  environment {
+    GITHUB_OWNER = 'KPICorporate'
+    REPO_SLUG    = 'KPICorporate/sap-btp-wflibero2-cap-cicd'
+    NPM_SCOPE    = '@KPICorporate'
+    NPM_CONFIG_USERCONFIG = "${WORKSPACE}/.npmrc"
+    CF_API = 'https://api.cf.eu10-004.hana.ondemand.com'
+    CF_ORG = 'Kuwait Petroleum Italia S.p.A.'   
+    CF_SPACE = 'FlexibleV1'
+  }
+
+  stages {
+
+    /* ----------------------------------------
+     * CHECKOUT
+     * ---------------------------------------- */
+   stage('Checkout') {
+      steps {
+        checkout([
+          $class: 'GitSCM',
+          branches: [[name: '*/main']],
+          userRemoteConfigs: [[
+            url: 'git@github.com:KPICorporate/sap-btp-wflibero2-cap-cicd.git',
+            credentialsId: '<ADD SSH CREDENTIALS>'
+          ]]
+        ])
+      }
+    }
+
+    /* ----------------------------------------
+     * INSTALL (NO LOCKFILE)    
+     * ---------------------------------------- */
+   stage('Install') {
+      steps {
+        script {
+          if (isUnix()) {
+            sh '''
+              set -e
+              npm install --legacy-peer-deps
+              [ -f app/package.json ] && (cd app && npm install) || true
+              [ -f srv/package.json ] && (cd srv && npm install) || true
+              [ -f db/package.json  ] && (cd db  && npm install) || true
+            '''
+          } else {
+            bat '''
+              npm install --legacy-peer-deps
+              if exist app\\package.json ( pushd app & npm install & popd )
+              if exist srv\\package.json ( pushd srv & npm install & popd )
+              if exist db\\package.json  ( pushd db  & npm install & popd )
+            '''
+          }
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * DEDUPE
+     * ---------------------------------------- */
+    stage('Dedupe') {
+      steps {
+        script {
+          if (isUnix()) { sh 'npm dedupe || true' }
+          else          { bat 'npm dedupe || exit /b 0' }
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * SEMANTIC RELEASE (Dry-run)
+     * ---------------------------------------- */
+    stage('Semantic Release (dry-run)') {
+      steps {
+        withCredentials([string(
+          credentialsId: '<ADD GITHUB PAT>',
+          variable: 'GITHUB_TOKEN'
+        )]) {
+          script {
+            runCmd(
+              '''
+              set -e
+
+              echo ">> Running semantic-release dry-run"
+
+              npx semantic-release --dry-run > sr.log 2>&1 || true
+
+              echo ">> Extracting version"
+
+              VERSION=$(grep -E "The next release version is|next release version" sr.log \
+                | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' \
+                | tail -1)
+
+              if [ -z "$VERSION" ]; then
+                echo "ERROR: version not found"
+                cat sr.log
+                exit 1
+              fi
+
+              echo "VERSION=$VERSION" > version.env
+              echo "Next version: $VERSION"
+              ''',
+              '''
+              $ErrorActionPreference = "Stop"
+
+              Write-Host ">> Running semantic-release dry-run"
+
+              npx semantic-release --dry-run *>&1 | Tee-Object sr.log
+
+              Write-Host ">> Extracting version"
+
+              $log = Get-Content sr.log
+
+              $match = $log | Select-String -Pattern "The next release version is|next release version|\\d+\\.\\d+\\.\\d+"
+
+              if (-not $match) {
+                Write-Host "ERROR: version not found"
+                Get-Content sr.log
+                exit 1
+              }
+
+              $version = ($match.Matches | Select-Object -Last 1).Value
+
+              "VERSION=$version" | Out-File version.env -Encoding ascii
+
+              Write-Host "Next version: $version"
+              '''
+            )
+          }
+        }
+      }
+    }
+
+    stage('Update Version Files') {
+      steps {
+        script {
+
+          // LOAD VERSION
+          def props = readProperties file: 'version.env'
+          env.VERSION = props.VERSION
+
+          if (!env.VERSION?.trim()) {
+            error "VERSION is empty!"
+          }
+
+          echo ">> Using VERSION=${env.VERSION}"
+          runCmd(
+            '''
+            set -e
+
+            echo ">> Updating npm version"
+            npm version ${VERSION} --no-git-tag-version
+
+            echo ">> Updating mta.yaml version"
+
+            if grep -q "^version:" mta.yaml; then
+              sed -i "s/^version:.*/version: ${VERSION}/" mta.yaml
+            else
+              echo "version: ${VERSION}" >> mta.yaml
+            fi
+
+            echo ">> Verifying changes"
+            grep "version:" mta.yaml
+            ''',
+            '''
+            $ErrorActionPreference = "Stop"
+
+            Write-Host ">> Updating mta.yaml version"
+
+            $content = Get-Content mta.yaml
+            
+            if ($content -match '^version:') {
+              $content = $content -replace '^version:.*', "version: $env:VERSION"
+            } else {
+              $content += "version: $env:VERSION"
+            }
+
+            $content | Set-Content mta.yaml
+            
+            Write-Host ">> Verifying mta.yaml"
+            Select-String -Path mta.yaml -Pattern "version"
+            '''
+          )
+        }
+      }
+    }
+
+
+
+    /* ----------------------------------------
+     * PREPARE DOCKERFILE (MBT + Node20)
+     * ---------------------------------------- */
+    stage('Prepare Dockerfile (MBT Node20)') {
+      steps {
+        script {
+          writeFile file: 'Dockerfile.mbt', text: '''
+    FROM node:20-bullseye
+
+    # =========================
+    # 1. OS dependencies (layer stabile)
+    # =========================
+    RUN apt-get update && apt-get install -y --no-install-recommends \
+        openjdk-11-jdk \
+        make \
+        g++ \
+        python3 \
+        ca-certificates \
+        git \
+        curl \
+        && rm -rf /var/lib/apt/lists/*
+
+    # =========================
+    # 2. CF CLI (layer separato per caching)
+    # =========================
+    RUN curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=8.7.8&source=github" -o cf.tgz \
+        && tar -xzf cf.tgz \
+        && install -m 0755 cf /usr/local/bin/cf \
+        && rm -f cf cf.tgz
+
+    # =========================
+    # 3. CF plugin (cambia raramente)
+    # =========================
+    RUN cf install-plugin -r CF-Community multiapps -f
+
+    # =========================
+    # 4. Node global tools (UNICO layer = caching migliore)
+    # =========================
+    RUN npm install -g mbt@latest @sap/cds-dk@7.8.0
+
+    # =========================
+    # 5. Verifiche (non invalidano cache precedente)
+    # =========================
+    RUN node -v && npm -v && javac -version && cf -v
+
+    # =========================
+    # 6. Working dir
+    # =========================
+    WORKDIR /project
+    '''
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * BUILD IMMAGINE LOCALE (mbt-node20:latest)
+     * ---------------------------------------- */
+    stage('Build MBT Node20 Image') {
+      steps {
+        script {
+          runCmd(
+            'docker build -t mbt-node20:latest -f Dockerfile.mbt .',
+            'docker build -t mbt-node20:latest -f Dockerfile.mbt .'
+          )
+        }
+      }
+    }
+
+    stage('Clean workspace') {
+      steps {
+        script {
+          if (isUnix()) {
+              sh 'rm -rf gen mta_archives node_modules kupit-flexiblewf-cap-*'
+          } else {
+              bat '''
+              if exist gen rmdir /s /q gen
+              if exist mta_archives rmdir /s /q mta_archives
+              if exist node_modules rmdir /s /q node_modules
+              for /d %%D in (kupit-flexiblewf-cap-*) do rmdir /s /q "%%D"
+              '''
+          }
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * BUILD MTA in DOCKER (usa mbt-node20:latest)
+     * ---------------------------------------- */
+    stage('Build MTA (Docker)') {
+      steps {
+        script {
+          def MBT_IMAGE = 'mbt-node20:latest'
+
+          if (isUnix()) {
+
+            sh """
+              set -e
+
+              docker run --rm -v "\$PWD:/project" -w /project ${MBT_IMAGE} \\
+                bash -c "rm -rf gen mta_archives kupit-flexiblewf-cap-* && mbt build -p cf -t mta_archives"
+
+              ls -al mta_archives
+            """
+
+          } else {
+            powershell '''
+              $ErrorActionPreference = "Stop"
+
+              $img = "mbt-node20:latest"
+              $workspace = $env:WORKSPACE.Replace("\\", "/")
+              $npmCache = "$workspace/.npm"
+
+              Write-Host "Workspace: $workspace"
+              Write-Host "NPM cache:  $npmCache"
+
+              docker run --rm `
+                -v "${workspace}:/project:ro" `
+                -v "${workspace}/mta_archives:/out" `
+                -v "${npmCache}:/root/.npm" `
+                -w /tmp $img `
+                bash -c "
+                  cp -r /project /tmp/project &&
+                  cd /tmp/project &&
+                  rm -rf gen mta_archives kupit-flexiblewf-cap-* &&
+                  mbt build -p cf -t mta_archives &&
+                  cp -r mta_archives/* /out/
+                " 
+
+              Get-ChildItem mta_archives
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Deploy to SAP BTP') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: '<ADD BTP CREDENTIALS>',
+          usernameVariable: 'CF_USER',
+          passwordVariable: 'CF_PASSWORD'
+        )]) {
+          script {
+
+            runCmd(
+              '''
+              set -e
+
+              MTAR=$(find mta_archives -name "*.mtar" | head -n 1)
+
+              if [ -z "$MTAR" ]; then
+                echo "MTAR not found!"
+                exit 1
+              fi
+
+              docker run --rm -v "$PWD:/project" -w /project mbt-node20:latest bash -c "
+                cf login -a $CF_API -u $CF_USER -p $CF_PASSWORD -o $CF_ORG -s $CF_SPACE &&
+                cf deploy $MTAR -f
+              "
+              ''',
+              '''
+              $ErrorActionPreference = "Stop"
+
+              $mtar = (Get-ChildItem mta_archives\\*.mtar | Select-Object -First 1).Name
+              if (-not $mtar) { throw "MTAR not found!" }
+
+              $pwd = (Get-Location).Path
+
+              docker run --rm -v "${pwd}:/project" -w /project mbt-node20:latest `
+                bash -c "cf login -a $env:CF_API -u $env:CF_USER -p $env:CF_PASSWORD -o $env:CF_ORG -s $env:CF_SPACE && cf deploy mta_archives/$mtar -f"
+              '''
+            )
+          }
+        }
+      }
+    }
+
+    stage('Commit & Tag Release') {
+      steps {
+        withCredentials([string(
+          credentialsId: '<ADD GITHUB PAT>',
+          variable: 'GIT_TOKEN'
+        )]) {
+          script {
+
+            runCmd(
+              // =========================
+              // UNIX
+              // =========================
+              '''
+              set -e
+
+              VERSION=$(cat version.env | sed 's/VERSION=//')
+
+              if [ -z "$VERSION" ]; then
+                echo ">>> No release to publish. Skipping..."
+                exit 0
+              fi
+
+              echo ">>> Committing version $VERSION"
+
+              git config user.email "ci@jenkins"
+              git config user.name "Jenkins CI"
+
+              echo ">>> Sync with remote"
+              git fetch origin main
+              git checkout main
+              git pull origin main
+
+              echo ">>> Update versions (npm + mta.yaml)"
+
+              # Aggiorna package.json + package-lock.json
+              npm version $VERSION --no-git-tag-version
+
+              # Aggiorna mta.yaml
+              if grep -q "^version:" mta.yaml; then
+                sed -i "s/^version:.*/version: $VERSION/" mta.yaml
+              else
+                echo "version: $VERSION" >> mta.yaml
+              fi
+
+              echo ">>> Commit"
+
+              git add package.json package-lock.json mta.yaml
+
+              git commit -m "chore(release): $VERSION [skip ci]" || echo "No changes"
+
+              echo ">>> Tag"
+
+              git tag -f "v$VERSION"
+
+              echo ">>> Push"
+
+              git push origin main
+              git push origin --tags
+              ''',
+
+              // =========================
+              // WINDOWS
+              // =========================
+              '''
+              $ErrorActionPreference = "Stop"
+
+              $version = (Get-Content version.env) -replace "VERSION=", ""
+
+              if (-not $version) {
+                Write-Host ">>> No release to publish"
+                exit 0
+              }
+
+              Write-Host ">>> Committing version $version"
+
+              git config user.email "ci@jenkins"
+              git config user.name "Jenkins CI"
+
+              Write-Host ">>> Sync with remote"
+
+              git fetch origin main
+              git checkout main
+              git pull origin main
+
+              Write-Host ">>> Update versions (npm + mta.yaml)"
+
+              # Aggiorna package.json + package-lock.json
+              npm version $version --no-git-tag-version
+
+              # Aggiorna mta.yaml
+              $content = Get-Content mta.yaml
+              if ($content -match '^version:') {
+                $content = $content -replace '^version:.*', "version: $version"
+              } else {
+                $content += "version: $version"
+              }
+              $content | Set-Content mta.yaml
+
+
+              Write-Host ">>> Commit"
+
+              git add package.json package-lock.json mta.yaml
+
+              git commit -m "chore(release): $version [skip ci]"
+              if ($LASTEXITCODE -ne 0) {
+                Write-Host ">>> No changes to commit"
+              }
+
+              Write-Host ">>> Tag"
+
+              git tag -f "v$version"
+
+              Write-Host ">>> Push"
+
+              git push origin main
+              git push origin --tags
+              '''
+            )
+          }
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * PACK (solo se nuova versione)
+     * ---------------------------------------- */
+    stage('Pack') {
+      when { expression { return env.NEW_VERSION } }
+      steps {
+        script {
+
+          def pkg = readJSON file: 'package.json'
+          def ver = pkg.version
+          def name = pkg.name.contains('/') ? pkg.name.split('/')[1] : pkg.name
+
+          runCmd(
+            """
+            rm -rf dist && mkdir -p dist
+            npm pack --silent --pack-destination dist
+            mv dist/*.tgz dist/${name}-${ver}.tgz
+            """,
+            """
+            if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+            New-Item -ItemType Directory dist | Out-Null
+            npm pack --silent --pack-destination dist
+            Get-ChildItem dist\\*.tgz | Rename-Item -NewName "${name}-${ver}.tgz"
+            """
+          )
+
+          env.FINAL_ASSET = "dist/${name}-${ver}.tgz"
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * ARCHIVE
+     * ---------------------------------------- */
+    stage('Archive') {
+      when { expression { return env.NEW_VERSION } }
+      steps {
+        archiveArtifacts artifacts: 'dist/*.tgz', fingerprint: true
+      }
+    }
+  } // END stages
+
+  post {
+      always {
+        script {
+
+          if (fileExists(".npmrc")) {
+
+            runCmd(
+              // UNIX
+              'rm -f .npmrc',
+
+              // WINDOWS
+              '''
+              if (Test-Path .npmrc) {
+                Remove-Item -Force .npmrc
+              }
+              '''
+            )
+
+          }
+        }
+      }
+    }
+  }

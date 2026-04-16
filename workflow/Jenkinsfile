@@ -1,1 +1,329 @@
-// Place here the jenkinsfile
+pipeline {
+  agent any
+
+  tools {
+    nodejs 'NodeJS_20'
+  }
+
+  options {
+    timestamps()
+    ansiColor('xterm')
+    disableConcurrentBuilds()
+    skipDefaultCheckout(true)
+  }
+
+  environment {
+    CF_API   = 'https://api.cf.eu10-004.hana.ondemand.com'
+    CF_ORG   = 'Kuwait Petroleum Italia S.p.A.'
+    CF_SPACE = 'FlexibleV1'
+  }
+
+  stages {
+
+    /* ----------------------------------------
+     * CHECKOUT
+     * ---------------------------------------- */
+    stage('Checkout') {
+      steps {
+        checkout([
+          $class: 'GitSCM',
+          branches: [[name: '*/main']],
+          userRemoteConfigs: [[
+            url: 'git@github.com:KPICorporate/sap-btp-wflibero2-workflow-cicd.git',
+            credentialsId: '<ADD SSH CREDENTIALS>'
+          ]]
+        ])
+      }
+    }
+
+    /* ----------------------------------------
+     * INSTALL DEPENDENCIES
+     * ---------------------------------------- */
+    stage('Install Semantic Release') {
+      steps {
+        script {
+          runCmd(
+            '''
+            npm install semantic-release \
+              @semantic-release/commit-analyzer \
+              @semantic-release/release-notes-generator \
+              @semantic-release/exec \
+              @semantic-release/git
+            ''',
+            '''
+            npm install semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/exec @semantic-release/git
+            '''
+          )
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * SEMANTIC RELEASE (DRY RUN)
+     * ---------------------------------------- */
+    stage('Semantic Release (dry-run)') {
+      steps {
+        script {
+          runCmd(
+            '''
+            set -e
+            npx semantic-release --dry-run > sr.log || true
+            VERSION=$(grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' sr.log | tail -1)
+            [ -z "$VERSION" ] && exit 1
+            echo "VERSION=$VERSION" > version.env
+            echo "Next version: $VERSION"
+            ''',
+            '''
+            $ErrorActionPreference = "Stop"
+            npx semantic-release --dry-run > sr.log
+            $match = Select-String -Path sr.log -Pattern "\\d+\\.\\d+\\.\\d+"
+            if (-not $match) { exit 1 }
+            $version = $match.Matches[-1].Value
+            "VERSION=$version" | Out-File version.env -Encoding ascii
+            Write-Host "Next version: $version"
+            '''
+          )
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * UPDATE MTA
+     * ---------------------------------------- */
+    stage('Update MTA Version') {
+      steps {
+        script {
+          runCmd(
+            '''
+            VERSION=$(cat version.env | sed 's/VERSION=//')
+            sed -i "s/^version: .*/version: $VERSION/" mta.yaml
+            ''',
+            '''
+            $version = (Get-Content version.env) -replace "VERSION=", ""
+            (Get-Content mta.yaml) `
+              -replace '^version: .*', "version: $version" |
+              Set-Content mta.yaml
+            '''
+          )
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * READ VERSION
+     * ---------------------------------------- */
+    stage('Read Version') {
+      steps {
+        script {
+
+          runCmd(
+            // UNIX
+            '''
+            set -e
+            grep '^version:' mta.yaml | cut -d' ' -f2 > version.txt
+            ''',
+
+            // WINDOWS
+            '''
+            $ErrorActionPreference = "Stop"
+            (Select-String '^version:' mta.yaml).ToString().Split(':')[1].Trim() | Out-File version.txt -Encoding ascii
+            '''
+          )
+
+          // Lettura file (cross-platform)
+          env.APP_VERSION = readFile('version.txt').trim()
+
+          echo "Versione finale: ${env.APP_VERSION}"
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * CLEAN WORKSPACE
+     * ---------------------------------------- */
+    stage('Clean Workspace') {
+      steps {
+        script {
+          runCmd(
+            'rm -rf gen mta_archives *.mtar',
+            '''
+            if (Test-Path gen) { Remove-Item -Recurse -Force gen }
+            if (Test-Path mta_archives) { Remove-Item -Recurse -Force mta_archives }
+            Remove-Item *.mtar -ErrorAction SilentlyContinue
+            '''
+          )
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * BUILD MTA
+     * ---------------------------------------- */
+    stage('Build MTA') {
+      steps {
+        script {
+          runCmd(
+            '''
+            set -e
+            docker run --rm \
+              -v "$PWD:/project" \
+              -w /project mbt-node20:latest \
+              bash -c "mbt build -p cf -t mta_archives"
+            ''',
+            '''
+            $workspace = $env:WORKSPACE.Replace("\\", "/")
+            docker run --rm `
+              -v "${workspace}:/project" `
+              -w /project mbt-node20:latest `
+              bash -c "mbt build -p cf -t mta_archives"
+            '''
+          )
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * DEPLOY
+     * ---------------------------------------- */
+    stage('Deploy') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: '<ADD BTP CREDENTIALS>',
+          usernameVariable: 'CF_USER',
+          passwordVariable: 'CF_PASSWORD'
+        )]) {
+          script {
+            runCmd(
+              '''
+              MTAR=$(ls mta_archives/*.mtar | head -n 1)
+
+              docker run --rm \
+                -e CF_API=$CF_API \
+                -e CF_USER=$CF_USER \
+                -e CF_PASSWORD=$CF_PASSWORD \
+                -e CF_ORG=$CF_ORG \
+                -e CF_SPACE=$CF_SPACE \
+                -v "$PWD:/project" \
+                -w /project mbt-node20:latest \
+                bash -c "cf login -a $CF_API -u $CF_USER -p $CF_PASSWORD -o $CF_ORG -s $CF_SPACE && cf deploy $MTAR -f"
+              ''',
+              '''
+              $mtar = (Get-ChildItem mta_archives\\*.mtar | Select-Object -First 1).Name
+
+              docker run --rm `
+                -e CF_API=$env:CF_API `
+                -e CF_USER=$env:CF_USER `
+                -e CF_PASSWORD=$env:CF_PASSWORD `
+                -e CF_ORG=$env:CF_ORG `
+                -e CF_SPACE=$env:CF_SPACE `
+                -v "${pwd}:/project" `
+                -w /project mbt-node20:latest `
+                bash -c "cf login -a $env:CF_API -u $env:CF_USER -p $env:CF_PASSWORD -o $env:CF_ORG -s $env:CF_SPACE && cf deploy mta_archives/$mtar -f"
+              '''
+            )
+          }
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * COMMIT & TAG
+     * ---------------------------------------- */
+    stage('Commit & Tag (after deploy)') {
+      steps {
+        withCredentials([string(
+          credentialsId: '<ADD GITHUB PAT>',
+          variable: 'GIT_TOKEN'
+        )]) {
+          script {
+
+            runCmd(
+              // =======================
+              // LINUX (sh)
+              // =======================
+              '''
+              set -e
+
+              VERSION=$(cat version.env | sed 's/VERSION=//')
+
+              echo ">>> Using version: $VERSION"
+
+              git config user.email "ci@jenkins"
+              git config user.name "Jenkins CI"
+
+              echo ">>> Switching to HTTPS remote with token"
+              git remote set-url origin git@github.com:Organization1102/sap-btp-wflibero2-workflow-cicd.git
+
+              echo ">>> Sync with remote"
+              git fetch origin main
+              git checkout main
+              git pull origin main
+
+              echo ">>> Commit version $VERSION"
+              git add mta.yaml
+
+              git commit -m "chore(release): $VERSION [skip ci]" || echo "No changes to commit"
+
+              echo ">>> Create/Update tag"
+              git tag -f "v$VERSION"
+
+              echo ">>> Push"
+              git push origin main
+              git push origin --tags
+              ''',
+
+              // =======================
+              // WINDOWS (powershell)
+              // =======================
+              '''
+              $ErrorActionPreference = "Stop"
+
+              $version = (Get-Content version.env) -replace "VERSION=", ""
+
+              Write-Host ">>> Using version: $version"
+
+              git config user.email "ci@jenkins"
+              git config user.name "Jenkins CI"
+
+              Write-Host ">>> Switching to HTTPS remote with token"
+              git remote set-url origin git@github.com:Organization1102/sap-btp-wflibero2-workflow-cicd.git
+
+              Write-Host ">>> Sync with remote"
+              git fetch origin main
+              git checkout main
+              git pull origin main
+
+              Write-Host ">>> Commit version $version"
+
+              git add mta.yaml
+
+              git commit -m "chore(release): $version [skip ci]"
+              if ($LASTEXITCODE -ne 0) {
+                Write-Host "No changes to commit"
+              }
+
+              Write-Host ">>> Create/Update tag"
+              git tag -f "v$version"
+
+              Write-Host ">>> Push"
+              git push origin main
+              git push origin --tags
+              '''
+            )
+         }
+       }
+     }
+   }
+ }
+}
+
+/* ----------------------------------------
+ * HELPER FUNCTION
+ * ---------------------------------------- */
+def runCmd(unixCmd, winCmd) {
+  if (isUnix()) {
+    sh unixCmd
+  } else {
+    powershell winCmd
+  }
+}

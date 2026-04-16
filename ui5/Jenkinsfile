@@ -1,1 +1,506 @@
-// Place here the jenkinsfile
+def runCmd(unixCmd, winCmd) {
+  if (isUnix()) {
+    sh unixCmd
+  } else {
+    powershell winCmd
+  }
+}
+
+pipeline {
+  agent any
+
+  tools {
+    nodejs 'NodeJS_20'
+  }
+
+  options {
+    timestamps()
+    ansiColor('xterm')
+    disableConcurrentBuilds()
+    skipDefaultCheckout(true)
+  }
+
+  environment {
+    CF_API   = 'https://api.cf.eu10-004.hana.ondemand.com'
+    CF_ORG   = 'Kuwait Petroleum Italia S.p.A.'
+    CF_SPACE = 'FlexibleV1'
+  }
+
+  stages {
+
+    /* ----------------------------------------
+     * CHECKOUT
+     * ---------------------------------------- */
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          runCmd(
+            'node -v && npm -v',
+            'node -v; npm -v'
+          )
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * INSTALL UI5 APP
+     * ---------------------------------------- */
+    stage('Install UI5') {
+      steps {
+        dir('myinbox') {
+          script {
+            runCmd(
+              'npm install',
+              'npm install'
+            )
+          }
+        }
+      }
+    }
+
+    stage('Install semantic-release plugins') {
+      steps {
+        script {
+          runCmd(
+            '''
+            set -e
+            echo ">>> Installing semantic-release (Unix)"
+            npm install --no-save semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator
+            npm list --depth=0 || true
+            ''',
+            '''
+            echo ">>> Installing semantic-release (Windows)"
+            npm install --no-save semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator
+            npm list --depth=0
+            '''
+          )
+        }
+      }
+    }
+
+    stage('Calculate Version (Semantic Release)') {
+      steps {
+        withCredentials([string(credentialsId: '<ADD GITHUB PAT>', variable: 'GIT_TOKEN')]) {
+          script {
+
+            runCmd(
+              '''
+              set -e
+
+              export GH_TOKEN=$GIT_TOKEN
+
+              echo ">>> Calculating version..."
+
+              OUTPUT=$(npx semantic-release --dry-run || true)
+
+              echo "$OUTPUT"
+
+              VERSION=$(echo "$OUTPUT" | grep -oE "next release version is [0-9]+\\.[0-9]+\\.[0-9]+" | awk '{print $NF}')
+
+              if [ -z "$VERSION" ]; then
+                echo "VERSION=" > version.env
+                echo "No release needed"
+              else
+                echo "VERSION=$VERSION" > version.env
+                echo "Version: $VERSION"
+              fi
+              ''',
+
+              '''
+              $ErrorActionPreference = "Stop"
+
+              $env:GH_TOKEN = $env:GIT_TOKEN
+
+              Write-Host ">>> Calculating version..."
+
+              $output = npx semantic-release --dry-run --no-ci | Out-String
+
+              Write-Host $output
+
+              if ($output -match "next release version is ([0-9]+\\.[0-9]+\\.[0-9]+)") {
+                $version = $matches[1]
+                "VERSION=$version" | Out-File version.env -Encoding ascii
+                Write-Host "Version: $version"
+              } else {
+                "VERSION=" | Out-File version.env -Encoding ascii
+                Write-Host "No release needed"
+              }
+              '''
+            )
+
+          }
+        }
+      }
+    }
+
+    stage('Update Version Files') {
+      steps {
+        script {
+          runCmd(
+            '''
+            set -e
+
+            VERSION=$(cat version.env | sed 's/VERSION=//')
+
+            [ -z "$VERSION" ] && echo "No version" && exit 0
+
+            echo ">>> Updating to $VERSION"
+
+            sed -i "s/^version: .*/version: $VERSION/" mta.yaml
+            sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" myinbox/package.json
+            sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" myinbox/webapp/manifest.json
+            ''',
+
+            '''
+            $ErrorActionPreference = "Stop"
+
+            $version = (Get-Content version.env -Raw).Replace("VERSION=", "").Trim()
+
+            if (-not $version) {
+              Write-Host "No version"
+              exit 0
+            }
+
+            Write-Host ">>> Updating to $version"
+
+            (Get-Content mta.yaml) `
+              -replace '^version: .*', "version: $version" |
+              Set-Content mta.yaml
+
+            $pkg = Get-Content myinbox/package.json -Raw | ConvertFrom-Json
+            $pkg.version = $version
+            $pkg | ConvertTo-Json -Depth 10 | Set-Content myinbox/package.json
+
+            $man = Get-Content myinbox/webapp/manifest.json -Raw | ConvertFrom-Json
+            $man."sap.app".applicationVersion.version = $version
+            $man | ConvertTo-Json -Depth 20 | Set-Content myinbox/webapp/manifest.json
+            '''
+          )
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * BUILD UI5
+     * ---------------------------------------- */
+    stage('Build UI5') {
+      steps {
+        dir('myinbox') {
+          script {
+            runCmd(
+              'npm run build:cf',
+              'npm run build:cf'
+            )
+          }
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * PREPARE DOCKER (MBT)
+     * ---------------------------------------- */
+    stage('Prepare MBT Image') {
+      steps {
+        writeFile file: 'Dockerfile.mbt', text: '''
+FROM node:20-bullseye
+
+RUN apt-get update && apt-get install -y \
+    openjdk-11-jdk \
+    make \
+    g++ \
+    python3 \
+    curl \
+    git
+
+RUN curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=8.7.8&source=github" -o cf.tgz \
+    && tar -xzf cf.tgz \
+    && install -m 0755 cf /usr/local/bin/cf
+
+RUN cf install-plugin -r CF-Community multiapps -f
+
+RUN npm install -g mbt
+RUN npm install -g @sap/cds-dk
+
+WORKDIR /project
+'''
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        script {
+          runCmd(
+            '''
+            set -e
+            docker build -t mbt-ui5:latest -f Dockerfile.mbt .
+            ''',
+            '''
+            $ErrorActionPreference = "Stop"
+            docker build -t mbt-ui5:latest -f Dockerfile.mbt .
+            '''
+          )
+        }
+      }
+    }
+
+    stage('Clean Workspace') {
+      steps {
+        script {
+          runCmd(
+            'rm -rf gen mta_archives *.mtar',
+            '''
+            if (Test-Path gen) { Remove-Item gen -Recurse -Force }
+            if (Test-Path mta_archives) { Remove-Item mta_archives -Recurse -Force }
+            Remove-Item *.mtar -ErrorAction SilentlyContinue
+            '''
+          )
+        }
+      }
+    }
+
+    stage('Clean MTA folders') {
+      steps {
+        script {
+          runCmd(
+            // ================= UNIX =================
+            '''
+            echo ">>> Cleaning MTA folders (Unix)"
+            rm -rf resources gen mta_archives
+            ''',
+
+            // ================= WINDOWS =================
+            '''
+            Write-Host ">>> Cleaning MTA folders (Windows)"
+
+            if (Test-Path resources) { Remove-Item resources -Recurse -Force }
+            if (Test-Path gen) { Remove-Item gen -Recurse -Force }
+            if (Test-Path mta_archives) { Remove-Item mta_archives -Recurse -Force }
+            '''
+          )
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * BUILD MTA
+     * ---------------------------------------- */
+    stage('Build MTA') {
+      steps {
+        script {
+          runCmd(
+            '''
+            set -e
+
+            docker run --rm \
+              -v "$PWD:/project" \
+              -w /project mbt-ui5:latest \
+              bash -c "mbt build -p cf -t mta_archives"
+            ''',
+
+            '''
+            $workspace = $env:WORKSPACE.Replace("\\", "/")
+
+            docker run --rm `
+              -v "${workspace}:/project" `
+              -w /project mbt-ui5:latest `
+              bash -c "mbt build -p cf -t mta_archives"
+            '''
+          )
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * DEPLOY
+     * ---------------------------------------- */
+    stage('Deploy to BTP') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: '<ADD BTP CREDENTIALS>',
+          usernameVariable: 'CF_USER',
+          passwordVariable: 'CF_PASSWORD'
+        )]) {
+          script {
+
+            runCmd(
+              // ================= UNIX =================
+              '''
+              set -e
+
+              MTAR=$(ls mta_archives/*.mtar | head -n 1)
+
+              echo ">>> Deploying $MTAR"
+
+              docker run --rm \
+                -e CF_API=$CF_API \
+                -e CF_USER=$CF_USER \
+                -e CF_PASSWORD=$CF_PASSWORD \
+                -e CF_ORG=$CF_ORG \
+                -e CF_SPACE=$CF_SPACE \
+                -v "$PWD:/project" \
+                -w /project mbt-node20:latest \
+                bash -c "cf login -a $CF_API -u $CF_USER -p $CF_PASSWORD -o $CF_ORG -s $CF_SPACE && cf deploy $MTAR -f"
+              ''',
+
+              // ================= WINDOWS =================
+              '''
+              $ErrorActionPreference = "Stop"
+
+              $mtar = (Get-ChildItem mta_archives\\*.mtar | Select-Object -First 1).Name
+              $workspace = (Get-Location).Path.Replace("\\", "/")
+
+              Write-Host ">>> Deploying $mtar"
+
+              docker run --rm `
+                -e CF_API=$env:CF_API `
+                -e CF_USER=$env:CF_USER `
+                -e CF_PASSWORD=$env:CF_PASSWORD `
+                -e CF_ORG=$env:CF_ORG `
+                -e CF_SPACE=$env:CF_SPACE `
+                -v "${workspace}:/project" `
+                -w /project mbt-node20:latest `
+                bash -c "cf login -a $env:CF_API -u $env:CF_USER -p $env:CF_PASSWORD -o $env:CF_ORG -s $env:CF_SPACE && cf deploy mta_archives/$mtar -f"
+              '''
+            )
+
+          }
+        }
+      }
+    }
+
+    stage('Commit & Tag Release') {
+      steps {
+        withCredentials([string(
+        credentialsId: '<ADD GITHUB PAT>',
+        variable: 'GIT_TOKEN'
+        )]) {
+          script {
+
+        runCmd(
+          // =========================
+          // UNIX
+          // =========================
+          '''
+          set -e
+
+          VERSION=$(cat version.env | sed 's/VERSION=//')
+
+          if [ -z "$VERSION" ]; then
+            echo ">>> No release to publish. Skipping..."
+            exit 0
+          fi
+
+          echo ">>> Committing and tagging version $VERSION"
+
+          git config user.email "ci@jenkins"
+          git config user.name "Jenkins CI"
+
+          echo ">>> Sync with remote"
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
+          echo ">>> Ensure version alignment"
+
+          # mta.yaml
+          sed -i "s/^version: .*/version: $VERSION/" mta.yaml
+
+          # package.json
+          if [ -f myinbox/package.json ]; then
+            sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" myinbox/package.json
+          fi
+
+          # manifest.json
+          if [ -f myinbox/webapp/manifest.json ]; then
+            sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" myinbox/webapp/manifest.json
+          fi
+
+          echo ">>> Commit"
+
+          git add mta.yaml myinbox/package.json myinbox/webapp/manifest.json
+
+          git commit -m "chore(release): $VERSION [skip ci]" || echo "No changes"
+
+          echo ">>> Tag"
+
+          git tag -f "v$VERSION"
+
+          echo ">>> Push"
+
+          git push origin main
+          git push origin --tags
+          ''',
+
+          // =========================
+          // WINDOWS (PowerShell)
+          // =========================
+          '''
+          $ErrorActionPreference = "Stop"
+
+          $version = (Get-Content version.env) -replace "VERSION=", ""
+
+          if (-not $version) {
+            Write-Host ">>> No release to publish"
+            exit 0
+          }
+
+          Write-Host ">>> Committing and tagging version $version"
+
+          git config user.email "ci@jenkins"
+          git config user.name "Jenkins CI"
+
+          Write-Host ">>> Sync with remote"
+
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
+          Write-Host ">>> Ensure version alignment"
+
+          # mta.yaml
+          (Get-Content mta.yaml) `
+            -replace '^version: .*', "version: $version" |
+            Set-Content mta.yaml
+
+          # package.json
+          $pkg = "myinbox/package.json"
+          if (Test-Path $pkg) {
+            $json = Get-Content $pkg -Raw | ConvertFrom-Json
+            $json.version = $version
+            $json | ConvertTo-Json -Depth 10 | Set-Content $pkg
+          }
+
+          # manifest.json
+          $manifest = "myinbox/webapp/manifest.json"
+          if (Test-Path $manifest) {
+            $json = Get-Content $manifest -Raw | ConvertFrom-Json
+            $json."sap.app".applicationVersion.version = $version
+            $json | ConvertTo-Json -Depth 20 | Set-Content $manifest
+          }
+
+          Write-Host ">>> Commit"
+
+          git add mta.yaml myinbox/package.json myinbox/webapp/manifest.json
+
+          git commit -m "chore(release): $version [skip ci]"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host ">>> No changes to commit"
+          }
+
+          Write-Host ">>> Tag"
+
+          git tag -f "v$version"
+
+          Write-Host ">>> Push"
+
+          git push origin main
+          git push origin --tags
+          '''
+        )
+      }
+     }
+    }
+   }
+  }
+}
