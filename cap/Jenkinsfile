@@ -21,13 +21,13 @@ pipeline {
   }
 
   environment {
-    GITHUB_OWNER = 'KPICorporate'
-    REPO_SLUG    = 'KPICorporate/sap-btp-wflibero2-cap-cicd'
-    NPM_SCOPE    = '@KPICorporate'
+    GITHUB_OWNER = 'Organization1102'
+    REPO_SLUG    = 'Organization1102/sap-btp-wflibero2-cap-cicd'
+    NPM_SCOPE    = '@Organization1102'
     NPM_CONFIG_USERCONFIG = "${WORKSPACE}/.npmrc"
-    CF_API = 'https://api.cf.eu10-004.hana.ondemand.com'
-    CF_ORG = 'Kuwait Petroleum Italia S.p.A.'   
-    CF_SPACE = 'FlexibleV1'
+    CF_API = 'https://api.cf.us10-001.hana.ondemand.com'
+    CF_ORG = '2345977etrial'   
+    CF_SPACE = 'dev'
   }
 
   stages {
@@ -41,8 +41,8 @@ pipeline {
           $class: 'GitSCM',
           branches: [[name: '*/main']],
           userRemoteConfigs: [[
-            url: 'git@github.com:KPICorporate/sap-btp-wflibero2-cap-cicd.git',
-            credentialsId: '<ADD SSH CREDENTIALS>'
+            url: 'git@github.com:Organization1102/sap-btp-wflibero2-cap-cicd.git',
+            credentialsId: 'ssh-github-jenkins'
           ]]
         ])
       }
@@ -54,22 +54,41 @@ pipeline {
    stage('Install') {
       steps {
         script {
-          if (isUnix()) {
-            sh '''
-              set -e
-              npm install --legacy-peer-deps
-              [ -f app/package.json ] && (cd app && npm install) || true
-              [ -f srv/package.json ] && (cd srv && npm install) || true
-              [ -f db/package.json  ] && (cd db  && npm install) || true
+          runCmd(
+            // UNIX
             '''
-          } else {
-            bat '''
-              npm install --legacy-peer-deps
-              if exist app\\package.json ( pushd app & npm install & popd )
-              if exist srv\\package.json ( pushd srv & npm install & popd )
-              if exist db\\package.json  ( pushd db  & npm install & popd )
+            set -e
+
+            echo ">>> Root install"
+            npm install --legacy-peer-deps
+
+            echo ">>> App install"
+            [ -f app/package.json ] && (cd app && npm install) || true
+
+            echo ">>> Srv install"
+            [ -f srv/package.json ] && (cd srv && npm install) || true
+
+            echo ">>> DB install"
+            [ -f db/package.json ] && (cd db && npm install) || true
+            ''',
+
+            // WINDOWS
             '''
-          }
+            $ErrorActionPreference = "Stop"
+
+            Write-Host ">>> Root install"
+            npm install --legacy-peer-deps
+
+            Write-Host ">>> App install"
+            if (Test-Path app\\package.json) { pushd app; npm install; popd }
+
+            Write-Host ">>> Srv install"
+            if (Test-Path srv\\package.json) { pushd srv; npm install; popd }
+
+            Write-Host ">>> DB install"
+            if (Test-Path db\\package.json) { pushd db; npm install; popd }
+            '''
+          )
         }
       }
     }
@@ -80,8 +99,19 @@ pipeline {
     stage('Dedupe') {
       steps {
         script {
-          if (isUnix()) { sh 'npm dedupe || true' }
-          else          { bat 'npm dedupe || exit /b 0' }
+          runCmd(
+            // UNIX
+            '''
+            set -e
+            npm dedupe || true
+            ''',
+
+            // WINDOWS
+        '''
+            $ErrorActionPreference = "Continue"
+            npm dedupe
+            '''
+          )
         }
       }
     }
@@ -92,7 +122,7 @@ pipeline {
     stage('Semantic Release (dry-run)') {
       steps {
         withCredentials([string(
-          credentialsId: '<ADD GITHUB PAT>',
+          credentialsId: 'github-token',
           variable: 'GITHUB_TOKEN'
         )]) {
           script {
@@ -277,16 +307,30 @@ pipeline {
     stage('Clean workspace') {
       steps {
         script {
-          if (isUnix()) {
-              sh 'rm -rf gen mta_archives node_modules kupit-flexiblewf-cap-*'
-          } else {
-              bat '''
-              if exist gen rmdir /s /q gen
-              if exist mta_archives rmdir /s /q mta_archives
-              if exist node_modules rmdir /s /q node_modules
-              for /d %%D in (kupit-flexiblewf-cap-*) do rmdir /s /q "%%D"
-              '''
-          }
+          runCmd(
+            // UNIX
+            '''
+            set -e
+
+            echo ">>> Cleaning workspace"
+            rm -rf gen mta_archives node_modules kupit-flexiblewf-cap-* || true
+            ''',
+
+            // WINDOWS
+            '''
+            $ErrorActionPreference = "Continue"
+
+            Write-Host ">>> Cleaning workspace"
+
+            if (Test-Path gen) { Remove-Item -Recurse -Force gen }
+            if (Test-Path mta_archives) { Remove-Item -Recurse -Force mta_archives }
+            if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
+
+            Get-ChildItem -Directory -Filter "kupit-flexiblewf-cap-*" | ForEach-Object {
+              Remove-Item -Recurse -Force $_.FullName
+            }
+            '''
+          )
         }
       }
     }
@@ -304,10 +348,19 @@ pipeline {
             sh """
               set -e
 
-              docker run --rm -v "\$PWD:/project" -w /project ${MBT_IMAGE} \\
-                bash -c "rm -rf gen mta_archives kupit-flexiblewf-cap-* && mbt build -p cf -t mta_archives"
-
-              ls -al mta_archives
+              docker run --rm \
+                -u \$(id -u):\$(id -g) \
+                -v "\$PWD:/project" \
+                -w /project ${MBT_IMAGE} \
+                bash -c "
+                  set -e
+                  rm -rf gen mta_archives kupit-flexiblewf-cap-* &&
+                  npm ci &&
+                  npx cds build &&
+                  cd gen/srv && npm ci --omit=dev &&
+                  cd /project &&
+                   mbt build -p cf -t mta_archives
+                "
             """
 
           } else {
@@ -329,6 +382,10 @@ pipeline {
                 bash -c "
                   cp -r /project /tmp/project &&
                   cd /tmp/project &&
+
+                  echo '>>> Fix permissions'
+                  chmod -R 777 . &&
+                  
                   rm -rf gen mta_archives kupit-flexiblewf-cap-* &&
                   mbt build -p cf -t mta_archives &&
                   cp -r mta_archives/* /out/
@@ -344,7 +401,7 @@ pipeline {
     stage('Deploy to SAP BTP') {
       steps {
         withCredentials([usernamePassword(
-          credentialsId: '<ADD BTP CREDENTIALS>',
+          credentialsId: 'cf-btp-trial',
           usernameVariable: 'CF_USER',
           passwordVariable: 'CF_PASSWORD'
         )]) {
@@ -386,7 +443,7 @@ pipeline {
     stage('Commit & Tag Release') {
       steps {
         withCredentials([string(
-          credentialsId: '<ADD GITHUB PAT>',
+          credentialsId: 'github-token',
           variable: 'GIT_TOKEN'
         )]) {
           script {
