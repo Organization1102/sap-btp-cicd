@@ -21,13 +21,13 @@ pipeline {
   }
 
   environment {
-    GITHUB_OWNER = 'Organization1102'
-    REPO_SLUG    = 'Organization1102/sap-btp-wflibero2-cap-cicd'
-    NPM_SCOPE    = '@Organization1102'
+    GITHUB_OWNER = 'KPICorporate'
+    REPO_SLUG    = 'KPICorporate/sap-btp-wflibero2-cap-cicd'
+    NPM_SCOPE    = '@KPICorporate'
     NPM_CONFIG_USERCONFIG = "${WORKSPACE}/.npmrc"
-    CF_API = 'https://api.cf.us10-001.hana.ondemand.com'
-    CF_ORG = '2345977etrial'   
-    CF_SPACE = 'dev'
+    CF_API = 'https://api.cf.eu10-004.hana.ondemand.com'
+    CF_ORG = 'Kuwait Petroleum Italia S.p.A.'   
+    CF_SPACE = 'FlexibleV1'
   }
 
   stages {
@@ -41,8 +41,8 @@ pipeline {
           $class: 'GitSCM',
           branches: [[name: '*/main']],
           userRemoteConfigs: [[
-            url: 'git@github.com:Organization1102/sap-btp-wflibero2-cap-cicd.git',
-            credentialsId: 'ssh-github-jenkins'
+            url: 'git@github.com:KPICorporate/sap-btp-wflibero2-cap-cicd.git',
+            credentialsId: '<ADD SSH CREDENTIALS>'
           ]]
         ])
       }
@@ -122,7 +122,7 @@ pipeline {
     stage('Semantic Release (dry-run)') {
       steps {
         withCredentials([string(
-          credentialsId: 'github-token',
+          credentialsId: '<ADD GITHUB PAT>',
           variable: 'GITHUB_TOKEN'
         )]) {
           script {
@@ -274,7 +274,7 @@ pipeline {
     # =========================
     # 4. Node global tools (UNICO layer = caching migliore)
     # =========================
-    RUN npm install -g mbt@latest @sap/cds-dk@7.8.0
+    RUN npm install -g mbt@latest @sap/cds-dk@8
 
     # =========================
     # 5. Verifiche (non invalidano cache precedente)
@@ -401,7 +401,7 @@ pipeline {
     stage('Deploy to SAP BTP') {
       steps {
         withCredentials([usernamePassword(
-          credentialsId: 'cf-btp-trial',
+          credentialsId: '<ADD BTP CREDENTIALS>',
           usernameVariable: 'CF_USER',
           passwordVariable: 'CF_PASSWORD'
         )]) {
@@ -443,7 +443,7 @@ pipeline {
     stage('Commit & Tag Release') {
       steps {
         withCredentials([string(
-          credentialsId: 'github-token',
+          credentialsId: '<ADD GITHUB PAT>',
           variable: 'GIT_TOKEN'
         )]) {
           script {
