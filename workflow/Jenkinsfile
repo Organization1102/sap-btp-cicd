@@ -1,6 +1,11 @@
 pipeline {
-  agent any
-
+  agent {
+    kubernetes(k8sAgent(
+      cloud: 'kubernetes',
+      podTemplate: 'gh',
+      serviceAccount: 'jenkins'
+    ))
+  }
   options {
     ansiColor('xterm')
     disableConcurrentBuilds()
