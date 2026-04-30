@@ -79,9 +79,9 @@ pipeline {
 				  echo "Installing Node 20 locally..."
 			      mkdir -p "$WORKSPACE/node20"
 
-				  curl -fsSL https://nodejs.org/dist/v20.19.2/node-v20.19.2-linux-x64.tar.xz -o node.tar.xz
+				  curl -fsSL https://nodejs.org/dist/v20.19.2/node-v20.19.2-linux-x64.tar.gz -o node.tar.gz
 
-				  tar -xf node.tar.xz
+				  tar -xzf node.tar.gz
 				  mv node-v20.19.2-linux-x64/* "$WORKSPACE/node20/"
 				fi
 
