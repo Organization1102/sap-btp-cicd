@@ -1,12 +1,7 @@
 pipeline {
   agent any
 
-  tools {
-    nodejs 'NodeJS_20'
-  }
-
   options {
-    timestamps()
     ansiColor('xterm')
     disableConcurrentBuilds()
     skipDefaultCheckout(true)
@@ -29,34 +24,94 @@ pipeline {
           $class: 'GitSCM',
           branches: [[name: '*/main']],
           userRemoteConfigs: [[
-            url: 'git@github.com:KPICorporate/sap-btp-wflibero2-workflow-cicd.git',
-            credentialsId: '<ADD SSH CREDENTIALS>'
+            url: 'git@github.com:Organization1102/sap-btp-wflibero2-workflow-cicd.git',
+            credentialsId: 'ssh-github-jenkins'
           ]]
         ])
       }
     }
+	
+	stage('Bootstrap Node 20') {
+		steps {
+			script {
+			runCmd(
+				'''
+				set -e
+
+				if [ ! -d "$WORKSPACE/node20" ]; then
+				  echo "Installing Node 20 locally..."
+			      mkdir -p "$WORKSPACE/node20"
+
+				  curl -fsSL https://nodejs.org/dist/v20.19.2/node-v20.19.2-linux-x64.tar.xz -o node.tar.xz
+
+				  tar -xf node.tar.xz
+				  mv node-v20.19.2-linux-x64/* "$WORKSPACE/node20/"
+				fi
+
+				export PATH=$WORKSPACE/node20/bin:$PATH
+
+				node -v
+				npm -v
+				''',
+
+				'''
+				$ErrorActionPreference = "Stop"
+
+				if (-Not (Test-Path "$env:WORKSPACE\\node20")) {
+
+				  Write-Host "Installing Node 20 locally..."
+
+			      Invoke-WebRequest `
+				   -Uri "https://nodejs.org/dist/v20.19.2/node-v20.19.2-win-x64.zip" `
+				   -OutFile node.zip
+
+				  Expand-Archive node.zip -DestinationPath $env:WORKSPACE
+
+				  Rename-Item `
+				    "$env:WORKSPACE\\node-v20.19.2-win-x64" `
+				    "$env:WORKSPACE\\node20"
+				}
+
+				$env:PATH="$env:WORKSPACE\\node20;$env:WORKSPACE\\node20\\node_modules\\npm\\bin;$env:PATH"
+
+				node -v
+				npm -v
+				'''
+			)
+		}
+	}
+ }
 
     /* ----------------------------------------
      * INSTALL DEPENDENCIES
      * ---------------------------------------- */
     stage('Install Semantic Release') {
       steps {
-        script {
-          runCmd(
-            '''
-            npm install semantic-release \
-              @semantic-release/commit-analyzer \
-              @semantic-release/release-notes-generator \
-              @semantic-release/exec \
-              @semantic-release/git
-            ''',
-            '''
-            npm install semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/exec @semantic-release/git
-            '''
-          )
-        }
+      script {
+        runCmd(
+          '''
+          export PATH=$WORKSPACE/node20/bin:$PATH
+
+          npm install semantic-release \
+            @semantic-release/commit-analyzer \
+            @semantic-release/release-notes-generator \
+            @semantic-release/exec \
+            @semantic-release/git
+          ''',
+
+          '''
+          $env:PATH="$env:WORKSPACE\\node20;$env:WORKSPACE\\node20\\node_modules\\npm\\bin;$env:PATH"
+
+          npm install semantic-release `
+            @semantic-release/commit-analyzer `
+            @semantic-release/release-notes-generator `
+            @semantic-release/exec `
+            @semantic-release/git
+          '''
+        )
       }
     }
+  }
 
     /* ----------------------------------------
      * SEMANTIC RELEASE (DRY RUN)
@@ -67,6 +122,7 @@ pipeline {
           runCmd(
             '''
             set -e
+            export PATH=$WORKSPACE/node20/bin:$PATH
             npx semantic-release --dry-run > sr.log || true
             VERSION=$(grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' sr.log | tail -1)
             [ -z "$VERSION" ] && exit 1
@@ -74,6 +130,7 @@ pipeline {
             echo "Next version: $VERSION"
             ''',
             '''
+            $env:PATH="$env:WORKSPACE\\node20;$env:WORKSPACE\\node20\\node_modules\\npm\\bin;$env:PATH"
             $ErrorActionPreference = "Stop"
             npx semantic-release --dry-run > sr.log
             $match = Select-String -Path sr.log -Pattern "\\d+\\.\\d+\\.\\d+"
@@ -165,17 +222,53 @@ pipeline {
           runCmd(
             '''
             set -e
-            docker run --rm \
-              -v "$PWD:/project" \
-              -w /project mbt-node20:latest \
-              bash -c "mbt build -p cf -t mta_archives"
+
+            export PATH=$WORKSPACE/node20/bin:$PATH
+
+            if ! command -v mbt >/dev/null 2>&1; then
+              echo "Installing MBT..."
+              npm install -g mbt
+            fi
+
+            mbt --version
+
+            echo "Cleaning previous build..."
+            rm -rf mta_archives gen
+
+            echo "Building MTAR..."
+            mbt build -p cf -t mta_archives
             ''',
+
             '''
-            $workspace = $env:WORKSPACE.Replace("\\", "/")
-            docker run --rm `
-              -v "${workspace}:/project" `
-              -w /project mbt-node20:latest `
-              bash -c "mbt build -p cf -t mta_archives"
+            $ErrorActionPreference = "Stop"
+
+            $env:PATH="$env:WORKSPACE\\node20;$env:WORKSPACE\\node20\\node_modules\\npm\\bin;$env:PATH"
+
+            if (-not (Get-Command mbt -ErrorAction SilentlyContinue)) {
+              Write-Host "Installing MBT..."
+              npm install -g mbt
+            }
+
+            mbt --version
+
+            if (-not (Get-Command make -ErrorAction SilentlyContinue)) {
+
+              if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+                  throw "Chocolatey non trovato"
+              }
+
+              Write-Host "Installing GNU Make via Chocolatey..."
+
+              choco install make -y --no-progress
+
+              # refresh PATH per il job corrente
+              $env:PATH += ";C:\\ProgramData\\chocolatey\\bin"
+            }
+
+            make --version
+            mbt --version
+
+            mbt build -p cf -t mta_archives
             '''
           )
         }
@@ -187,38 +280,88 @@ pipeline {
      * ---------------------------------------- */
     stage('Deploy') {
       steps {
+
         withCredentials([usernamePassword(
-          credentialsId: '<ADD BTP CREDENTIALS>',
+          credentialsId: 'cf-btp-trial',
           usernameVariable: 'CF_USER',
           passwordVariable: 'CF_PASSWORD'
         )]) {
+
           script {
+
             runCmd(
               '''
+              set -e
+
+              export PATH=$WORKSPACE/node20/bin:$PATH
+
+              echo "Installing CF CLI..."
+
+              if [ ! -f "$WORKSPACE/cf" ]; then
+                curl -L \
+                "https://packages.cloudfoundry.org/stable?release=linux64-binary&source=github" \
+                -o cf.tgz
+
+                tar -xzf cf.tgz
+                chmod +x cf
+                mv cf $WORKSPACE/cf
+              fi
+
+              export PATH=$WORKSPACE:$PATH
+
+              cf version
+
+              cf install-plugin -f multiapps
+
               MTAR=$(ls mta_archives/*.mtar | head -n 1)
 
-              docker run --rm \
-                -e CF_API=$CF_API \
-                -e CF_USER=$CF_USER \
-                -e CF_PASSWORD=$CF_PASSWORD \
-                -e CF_ORG=$CF_ORG \
-                -e CF_SPACE=$CF_SPACE \
-                -v "$PWD:/project" \
-                -w /project mbt-node20:latest \
-                bash -c "cf login -a $CF_API -u $CF_USER -p $CF_PASSWORD -o $CF_ORG -s $CF_SPACE && cf deploy $MTAR -f"
-              ''',
-              '''
-              $mtar = (Get-ChildItem mta_archives\\*.mtar | Select-Object -First 1).Name
+              echo "Logging into BTP..."
 
-              docker run --rm `
-                -e CF_API=$env:CF_API `
-                -e CF_USER=$env:CF_USER `
-                -e CF_PASSWORD=$env:CF_PASSWORD `
-                -e CF_ORG=$env:CF_ORG `
-                -e CF_SPACE=$env:CF_SPACE `
-                -v "${pwd}:/project" `
-                -w /project mbt-node20:latest `
-                bash -c "cf login -a $env:CF_API -u $env:CF_USER -p $env:CF_PASSWORD -o $env:CF_ORG -s $env:CF_SPACE && cf deploy mta_archives/$mtar -f"
+              cf login \
+                -a $CF_API \
+                -u $CF_USER \
+                -p $CF_PASSWORD \
+                -o $CF_ORG \
+                -s $CF_SPACE
+
+              echo "Deploying $MTAR"
+
+              cf deploy $MTAR -f
+              ''',
+
+              '''
+              $ErrorActionPreference = "Stop"
+
+              # Aggiungi CF CLI al PATH
+              $cfPath = "C:\\Program Files\\Cloud Foundry"
+
+              if (Test-Path "$cfPath\\cf.exe") {
+                  $env:PATH="$cfPath;$env:PATH"
+              } else {
+                  throw "CF CLI non trovata in $cfPath"
+              }
+
+              cf version
+
+              cf install-plugin -f multiapps
+
+              $mtar = (
+                Get-ChildItem mta_archives\\*.mtar |
+                Select-Object -First 1
+              ).FullName
+
+              Write-Host "Logging into BTP..."
+
+              cf login `
+                -a $env:CF_API `
+                -u $env:CF_USER `
+                -p $env:CF_PASSWORD `
+                -o $env:CF_ORG `
+                -s $env:CF_SPACE
+
+              Write-Host "Deploying $mtar"
+
+              cf deploy $mtar -f
               '''
             )
           }
@@ -232,7 +375,7 @@ pipeline {
     stage('Commit & Tag (after deploy)') {
       steps {
         withCredentials([string(
-          credentialsId: '<ADD GITHUB PAT>',
+          credentialsId: 'github-token',
           variable: 'GIT_TOKEN'
         )]) {
           script {
