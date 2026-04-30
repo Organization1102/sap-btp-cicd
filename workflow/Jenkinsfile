@@ -24,8 +24,8 @@ pipeline {
           $class: 'GitSCM',
           branches: [[name: '*/main']],
           userRemoteConfigs: [[
-            url: 'git@github.com:KPICorporate/sap-btp-wflibero2-workflow-cicd.git',
-            credentialsId: 'sap-btp-cicd'
+            url: 'https://github.com/KPICorporate/sap-btp-wflibero2-workflow-cicd.git',
+            credentialsId: 'github-token'
           ]]
         ])
       }
@@ -395,7 +395,7 @@ pipeline {
               git config user.name "Jenkins CI"
 
               echo ">>> Switching to HTTPS remote with token"
-              git remote set-url origin git@github.com:KPICorporate/sap-btp-wflibero2-workflow-cicd.git
+              git remote set-url origin https://github.com/KPICorporate/sap-btp-wflibero2-workflow-cicd.git
 
               echo ">>> Sync with remote"
               git fetch origin main
@@ -429,7 +429,7 @@ pipeline {
               git config user.name "Jenkins CI"
 
               Write-Host ">>> Switching to HTTPS remote with token"
-              git remote set-url origin git@github.com:KPICorporate/sap-btp-wflibero2-workflow-cicd.git
+              git remote set-url origin https://github.com/KPICorporate/sap-btp-wflibero2-workflow-cicd.git
 
               Write-Host ">>> Sync with remote"
               git fetch origin main
