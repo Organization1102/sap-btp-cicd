@@ -29,7 +29,7 @@ pipeline {
 
       environment {
         GH_ORGANIZATION = 'KPICorporate'
-        REPOSITORY_NAME = 'sap-btp-wflibero2-workflow-cicd'
+        REPOSITORY_NAME = 'sap-btp-cicd'
         JENKINS_ENV = "PROD"
       }
 
