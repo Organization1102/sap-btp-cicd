@@ -75,20 +75,22 @@ pipeline {
 				'''
 				set -e
 
-				if [ ! -d "$WORKSPACE/node20" ]; then
-				  echo "Installing Node 20 locally..."
-			      mkdir -p "$WORKSPACE/node20"
+        if [ ! -x "$WORKSPACE/node20/bin/node" ]; then
+          echo "Installing Node 20 locally..."
 
-				  curl -fsSL https://nodejs.org/dist/v20.19.2/node-v20.19.2-linux-x64.tar.gz -o node.tar.gz
+          rm -rf "$WORKSPACE/node20"
+          mkdir -p "$WORKSPACE/node20"
 
-				  tar -xzf node.tar.gz
-				  mv node-v20.19.2-linux-x64/* "$WORKSPACE/node20/"
-				fi
+          curl -fsSL https://nodejs.org/dist/v20.19.2/node-v20.19.2-linux-x64.tar.gz -o node.tar.gz
 
-				export PATH=$WORKSPACE/node20/bin:$PATH
+          tar -xzf node.tar.gz
+          mv node-v20.19.2-linux-x64/* "$WORKSPACE/node20/"
+        fi
 
-				node -v
-				npm -v
+        export PATH=$WORKSPACE/node20/bin:$PATH
+
+        node -v
+        npm -v
 				''',
 
 				'''
