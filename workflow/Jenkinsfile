@@ -25,7 +25,7 @@ pipeline {
           branches: [[name: '*/main']],
           userRemoteConfigs: [[
             url: 'git@github.com:KPICorporate/sap-btp-wflibero2-workflow-cicd.git',
-            credentialsId: 'AUT-PLAT-PROD-DK-SAP-BTP-CICD'
+            credentialsId: 'sap-btp-cicd'
           ]]
         ])
       }
