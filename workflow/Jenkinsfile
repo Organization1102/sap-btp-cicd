@@ -19,15 +19,51 @@ pipeline {
      * CHECKOUT
      * ---------------------------------------- */
     stage('Checkout') {
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'gh',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      environment {
+        GH_ORGANIZATION = 'KPICorporate'
+        REPOSITORY_NAME = 'sap-btp-wflibero2-workflow-cicd'
+      }
+
       steps {
-        checkout([
-          $class: 'GitSCM',
-          branches: [[name: '*/main']],
-          userRemoteConfigs: [[
-            url: 'https://github.com/KPICorporate/sap-btp-wflibero2-workflow-cicd.git',
-            credentialsId: 'github-token'
-          ]]
-        ])
+        container('gh') {
+          script {
+            try {
+
+              // Costruzione variabili come da standard piattaforma
+              def repoUrl = "git@github.com:${env.GH_ORGANIZATION}/${env.REPOSITORY_NAME}.git"
+              def dkName  = ("AUT-PLAT-${env.JENKINS_ENV}-DK-${env.REPOSITORY_NAME}").toUpperCase()
+
+              cloneWithDK(
+                repo_url: repoUrl,
+                dk: dkName,
+                branch: "main"
+              ) {
+                dir("${env.REPOSITORY_NAME}") {
+                  env.COMMIT_HASH_APP = sh(
+                    script: "git log -n 1 --format='%h'",
+                    returnStdout: true
+                  ).trim()
+                }
+              }
+
+              stash name: "${BUILD_TAG}",
+                    includes: "${env.REPOSITORY_NAME}/**",
+                    useDefaultExcludes: false
+
+            } catch (Exception e) {
+              sh 'exit 400'
+              error("Code checkout failed: ${e}")
+            }
+          }
+        }
       }
     }
 	
@@ -374,10 +410,11 @@ pipeline {
      * ---------------------------------------- */
     stage('Commit & Tag (after deploy)') {
       steps {
-        withCredentials([string(
+        withCredentials([usernamePassword(
           credentialsId: 'github-token',
-          variable: 'GIT_TOKEN'
-        )]) {
+          usernameVariable: 'GIT_USER',
+          passwordVariable: 'GIT_TOKEN'
+    )]) {
           script {
 
             runCmd(
@@ -395,7 +432,7 @@ pipeline {
               git config user.name "Jenkins CI"
 
               echo ">>> Switching to HTTPS remote with token"
-              git remote set-url origin https://github.com/KPICorporate/sap-btp-wflibero2-workflow-cicd.git
+              git remote set-url origin https://$GIT_USER:$GIT_TOKEN@github.com/KPICorporate/sap-btp-wflibero2-workflow-cicd.git
 
               echo ">>> Sync with remote"
               git fetch origin main
