@@ -24,7 +24,8 @@ pipeline {
           $class: 'GitSCM',
           branches: [[name: '*/main']],
           userRemoteConfigs: [[
-            url: 'git@github.com:KPICorporate/sap-btp-wflibero2-workflow-cicd.git'
+            url: 'git@github.com:KPICorporate/sap-btp-wflibero2-workflow-cicd.git',
+            credentialsId: 'AUT-PLAT-PROD-DK-SAP-BTP-CICD'
           ]]
         ])
       }
