@@ -163,10 +163,7 @@ pipeline {
     stage('Semantic Release (dry-run)') {
       steps {
         container('gh') {
-          withCredentials([string(
-            credentialsId: 'github-token',
-            variable: 'GITHUB_TOKEN'
-          )]) {
+        withAwsSecret([secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(), type: "keyvalue"]) {
             script {
               runCmd(
                 '''
