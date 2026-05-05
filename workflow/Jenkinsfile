@@ -9,8 +9,12 @@ spec:
   containers:
   - name: sap-btp
     image: node:20-alpine
-    command:
-      - cat
+    command: ['cat']
+    tty: true
+
+  - name: gh
+    image: alpine:3.19
+    command: ['cat']
     tty: true
 """
     }
@@ -35,12 +39,13 @@ spec:
   stages {
 
     /* ----------------------------------------
-     * CHECKOUT
+     * CHECKOUT (GH container)
      * ---------------------------------------- */
     stage('Checkout') {
       steps {
-        container('sap-btp') {
+        container('gh') {
           script {
+
             def repoUrl = "git@github.com:${env.GH_ORGANIZATION}/${env.REPOSITORY_NAME}.git"
             def dkName  = ("AUT-PLAT-${env.JENKINS_ENV}-DK-${env.REPOSITORY_NAME}").toUpperCase()
 
@@ -48,21 +53,45 @@ spec:
               repo_url: repoUrl,
               dk: dkName,
               branch: "main"
-            ) {
-              dir("${env.REPOSITORY_NAME}") {
-                env.COMMIT_HASH_APP = sh(
-                  script: "git log -n 1 --format='%h'",
-                  returnStdout: true
-                ).trim()
-              }
+            )
+
+            dir("${env.REPOSITORY_NAME}") {
+              env.COMMIT_HASH_APP = sh(
+                script: "git log -n 1 --format='%h'",
+                returnStdout: true
+              ).trim()
             }
+          }
         }
       }
     }
-  }
 
     /* ----------------------------------------
-     * BOOTSTRAP TOOLING (ONCE)
+     * LOAD SECRETS (GH ONLY)
+     * ---------------------------------------- */
+    stage('Load Secrets') {
+      steps {
+        container('gh') {
+          script {
+            withAwsSecret([
+              secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN",
+              type: "keyvalue"
+            ]) {
+
+              env.GITHUB_TOKEN = GITHUB_TOKEN
+
+              sh '''
+                echo "Secrets loaded"
+                echo "Token length: ${#GITHUB_TOKEN}"
+              '''
+            }
+          }
+        }
+      }
+    }
+
+    /* ----------------------------------------
+     * BOOTSTRAP TOOLING (SAP-BTP)
      * ---------------------------------------- */
     stage('Bootstrap') {
       steps {
@@ -70,81 +99,60 @@ spec:
           sh '''
             set -e
 
-            echo "Installing OS deps..."
             apk add --no-cache \
               curl git make g++ python3 openjdk21-jre
 
-            echo "Installing Node tools..."
             npm install -g mbt @sap/cds-dk
 
-            echo "Installing CF CLI..."
             curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&source=github" -o cf.tgz
             tar -xzf cf.tgz
             mv cf /usr/local/bin/
             chmod +x /usr/local/bin/cf
 
-            cf version
             node -v
             npm -v
             mbt --version
+            cf version
           '''
         }
       }
     }
 
     /* ----------------------------------------
-     * INSTALL SEMANTIC RELEASE
+     * SEMANTIC RELEASE
      * ---------------------------------------- */
-    stage('Install Semantic Release') {
+    stage('Semantic Release') {
       steps {
         container('sap-btp') {
           sh '''
+            set -e
+
+            git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+
             npm install semantic-release \
               @semantic-release/commit-analyzer \
               @semantic-release/release-notes-generator \
               @semantic-release/exec \
               @semantic-release/git
+
+            npx semantic-release --dry-run > sr.log || true
+
+            VERSION=$(grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' sr.log | tail -1)
+
+            if [ -z "$VERSION" ]; then
+              echo "ERROR: version not found"
+              exit 1
+            fi
+
+            echo "VERSION=$VERSION" > version.env
+            echo "Next version: $VERSION"
           '''
         }
       }
     }
 
     /* ----------------------------------------
-     * SEMANTIC RELEASE (DRY RUN)
-     * ---------------------------------------- */
-    stage('Semantic Release') {
-      steps {
-        container('sap-btp') {
-          withAwsSecret([
-            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN",
-            type: "keyvalue"
-          ]) {
-            sh '''
-              set -e
-
-              echo "Configuring GitHub auth..."
-              git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
-
-              echo "Running semantic-release..."
-              npm exec semantic-release -- --dry-run > sr.log || true
-
-              VERSION=$(grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' sr.log | tail -1)
-
-              if [ -z "$VERSION" ]; then
-                echo "ERROR: Version not found"
-                exit 1
-              fi
-
-              echo "VERSION=$VERSION" > version.env
-              echo "Next version: $VERSION"
-            '''
-          }
-        }
-      }
-    }
-
-    /* ----------------------------------------
-     * UPDATE MTA VERSION
+     * UPDATE MTA
      * ---------------------------------------- */
     stage('Update MTA') {
       steps {
@@ -155,8 +163,6 @@ spec:
             VERSION=$(cat version.env | sed 's/VERSION=//')
 
             cd ${REPOSITORY_NAME}
-
-            echo "Updating mta.yaml to $VERSION"
 
             sed -i "s/^version: .*/version: $VERSION/" mta.yaml
           '''
@@ -177,7 +183,6 @@ spec:
 
             rm -rf mta_archives gen
 
-            echo "Building MTAR..."
             mbt build -p cf -t mta_archives
           '''
         }
@@ -190,11 +195,13 @@ spec:
     stage('Deploy') {
       steps {
         container('sap-btp') {
+
           withCredentials([usernamePassword(
             credentialsId: 'cf-btp-trial',
             usernameVariable: 'CF_USER',
             passwordVariable: 'CF_PASSWORD'
           )]) {
+
             sh '''
               set -e
 
@@ -211,8 +218,6 @@ spec:
 
               MTAR=$(ls mta_archives/*.mtar | head -n 1)
 
-              echo "Deploying $MTAR"
-
               cf deploy $MTAR -f
             '''
           }
@@ -225,12 +230,13 @@ spec:
      * ---------------------------------------- */
     stage('Commit & Tag') {
       steps {
-        container('sap-btp') {
+        container('gh') {
           withCredentials([usernamePassword(
             credentialsId: 'github-token',
             usernameVariable: 'GIT_USER',
             passwordVariable: 'GIT_TOKEN'
           )]) {
+
             sh '''
               set -e
 
