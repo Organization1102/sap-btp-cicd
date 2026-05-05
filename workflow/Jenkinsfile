@@ -48,18 +48,18 @@ spec:
               repo_url: repoUrl,
               dk: dkName,
               branch: "main"
-            )
-
-            dir("${env.REPOSITORY_NAME}") {
-              env.COMMIT_HASH_APP = sh(
-                script: "git log -n 1 --format='%h'",
-                returnStdout: true
-              ).trim()
+            ) {
+              dir("${env.REPOSITORY_NAME}") {
+                env.COMMIT_HASH_APP = sh(
+                  script: "git log -n 1 --format='%h'",
+                  returnStdout: true
+                ).trim()
+              }
             }
-          }
         }
       }
     }
+  }
 
     /* ----------------------------------------
      * BOOTSTRAP TOOLING (ONCE)
