@@ -29,28 +29,50 @@ pipeline {
      * CHECKOUT
      * ---------------------------------------- */
     stage('Checkout') {
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'gh',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      environment {
+        GH_ORGANIZATION = 'KPICorporate'
+        REPOSITORY_NAME = 'sap-btp-cicd'
+        JENKINS_ENV = "PROD"
+      }
+
       steps {
         container('gh') {
           script {
-            def repoUrl = "git@github.com:${env.GH_ORGANIZATION}/${env.REPOSITORY_NAME}.git"
-            def dkName  = ("AUT-PLAT-${env.JENKINS_ENV}-DK-${env.REPOSITORY_NAME}").toUpperCase()
+            try {
 
-            cloneWithDK(
-              repo_url: repoUrl,
-              dk: dkName,
-              branch: "main"
-            ) {
-              dir("${env.REPOSITORY_NAME}") {
-                env.COMMIT_HASH_APP = sh(
-                  script: "git log -n 1 --format='%h'",
-                  returnStdout: true
-                ).trim()
+              // Costruzione variabili come da standard piattaforma
+              def repoUrl = "git@github.com:${env.GH_ORGANIZATION}/${env.REPOSITORY_NAME}.git"
+              def dkName  = ("AUT-PLAT-${env.JENKINS_ENV}-DK-${env.REPOSITORY_NAME}").toUpperCase()
+
+              cloneWithDK(
+                repo_url: repoUrl,
+                dk: dkName,
+                branch: "main"
+              ) {
+                dir("${env.REPOSITORY_NAME}") {
+                  env.COMMIT_HASH_APP = sh(
+                    script: "git log -n 1 --format='%h'",
+                    returnStdout: true
+                  ).trim()
+                }
               }
-            }
 
-            stash name: "source",
-                  includes: "${env.REPOSITORY_NAME}/**",
-                  useDefaultExcludes: false
+              stash name: "${BUILD_TAG}",
+                    includes: "${env.REPOSITORY_NAME}/**",
+                    useDefaultExcludes: false
+
+            } catch (Exception e) {
+              sh 'exit 400'
+              error("Code checkout failed: ${e}")
+            }
           }
         }
       }
