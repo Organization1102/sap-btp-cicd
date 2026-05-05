@@ -15,6 +15,7 @@ pipeline {
     GH_ORGANIZATION = 'KPICorporate'
     REPOSITORY_NAME = 'sap-btp-cicd'
     JENKINS_ENV     = 'PROD'
+    PATH = "${WORKSPACE}/node20/bin:${env.PATH}"
   }
 
   stages {
@@ -56,6 +57,48 @@ pipeline {
       }
     }
 
+    stage('Setup Runtime (TEMP)') {
+      steps {
+        container('gh') {
+          sh '''
+            set -e
+
+            echo "Install OS deps..."
+            apk add --no-cache \
+              bash curl git make g++ python3 openjdk21-jre || true
+
+            echo "Install Node 20..."
+            if ! command -v node >/dev/null 2>&1; then
+              curl -fsSL https://nodejs.org/dist/v20.19.2/node-v20.19.2-linux-x64.tar.gz -o node.tar.gz
+              tar -xzf node.tar.gz
+              mv node-v20.19.2-linux-x64 node20
+              export PATH=$PWD/node20/bin:$PATH
+            fi
+
+            echo "Install global tools..."
+            npm install -g \
+              mbt \
+              @sap/cds-dk \
+              semantic-release \
+              @semantic-release/commit-analyzer \
+              @semantic-release/release-notes-generator \
+              @semantic-release/exec \
+              @semantic-release/git
+
+            echo "Install CF CLI..."
+            curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&source=github" -o cf.tgz
+            tar -xzf cf.tgz
+            chmod +x cf
+            mv cf /usr/local/bin/cf || true
+
+            cf version
+            node -v
+            npm -v
+          '''
+        }
+      }
+    }
+
     /* ----------------------------------------
      * SEMANTIC RELEASE
      * ---------------------------------------- */
@@ -63,13 +106,13 @@ pipeline {
       agent {
         kubernetes(k8sAgent(
           cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
+          podTemplate: 'gh',
           serviceAccount: 'jenkins'
         ))
       }
 
       steps {
-        container('sap-btp') {
+        container('gh') {
           unstash 'workspace'
 
           withAwsSecret([
@@ -105,13 +148,13 @@ pipeline {
       agent {
         kubernetes(k8sAgent(
           cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
+          podTemplate: 'gh',
           serviceAccount: 'jenkins'
         ))
       }
 
       steps {
-        container('sap-btp') {
+        container('gh') {
           unstash 'workspace'
 
           sh '''
@@ -138,13 +181,13 @@ pipeline {
       agent {
         kubernetes(k8sAgent(
           cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
+          podTemplate: 'gh',
           serviceAccount: 'jenkins'
         ))
       }
 
       steps {
-        container('sap-btp') {
+        container('gh') {
           unstash 'workspace'
 
           sh '''
@@ -173,13 +216,13 @@ pipeline {
       agent {
         kubernetes(k8sAgent(
           cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
+          podTemplate: 'gh',
           serviceAccount: 'jenkins'
         ))
       }
 
       steps {
-        container('sap-btp') {
+        container('gh') {
           unstash 'workspace'
 
           withCredentials([usernamePassword(
