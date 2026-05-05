@@ -2,7 +2,7 @@ pipeline {
   agent {
     kubernetes(k8sAgent(
       cloud: 'kubernetes',
-      podTemplate: 'gh-sap-btp',   // 👈 deve contenere entrambi i container
+      podTemplate: 'gh',   
       serviceAccount: 'jenkins'
     ))
   }
