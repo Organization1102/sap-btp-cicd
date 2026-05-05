@@ -1,5 +1,20 @@
 pipeline {
-  agent none
+
+  agent {
+    kubernetes {
+      yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: sap-btp
+    image: node:20-alpine
+    command:
+      - cat
+    tty: true
+"""
+    }
+  }
 
   options {
     ansiColor('xterm')
@@ -14,26 +29,17 @@ pipeline {
 
     GH_ORGANIZATION = 'KPICorporate'
     REPOSITORY_NAME = 'sap-btp-cicd'
-    JENKINS_ENV     = 'PROD'
-    PATH = "${WORKSPACE}/node20/bin:${env.PATH}"
+    JENKINS_ENV = "PROD"
   }
 
   stages {
 
     /* ----------------------------------------
-     * CHECKOUT (gh pod)
+     * CHECKOUT
      * ---------------------------------------- */
     stage('Checkout') {
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
-
       steps {
-        container('gh') {
+        container('sap-btp') {
           script {
             def repoUrl = "git@github.com:${env.GH_ORGANIZATION}/${env.REPOSITORY_NAME}.git"
             def dkName  = ("AUT-PLAT-${env.JENKINS_ENV}-DK-${env.REPOSITORY_NAME}").toUpperCase()
@@ -42,79 +48,73 @@ pipeline {
               repo_url: repoUrl,
               dk: dkName,
               branch: "main"
-            ) {
-              dir("${env.REPOSITORY_NAME}") {
-                env.COMMIT_HASH_APP = sh(
-                  script: "git log -n 1 --format='%h'",
-                  returnStdout: true
-                ).trim()
-              }
-            }
+            )
 
-            stash name: 'workspace', includes: '**', useDefaultExcludes: false
+            dir("${env.REPOSITORY_NAME}") {
+              env.COMMIT_HASH_APP = sh(
+                script: "git log -n 1 --format='%h'",
+                returnStdout: true
+              ).trim()
+            }
           }
         }
       }
     }
 
-    stage('Setup Runtime (TEMP)') {
+    /* ----------------------------------------
+     * BOOTSTRAP TOOLING (ONCE)
+     * ---------------------------------------- */
+    stage('Bootstrap') {
       steps {
-        container('gh') {
+        container('sap-btp') {
           sh '''
             set -e
 
-            echo "Install OS deps..."
+            echo "Installing OS deps..."
             apk add --no-cache \
-              bash curl git make g++ python3 openjdk21-jre || true
+              curl git make g++ python3 openjdk21-jre
 
-            echo "Install Node 20..."
-            if ! command -v node >/dev/null 2>&1; then
-              curl -fsSL https://nodejs.org/dist/v20.19.2/node-v20.19.2-linux-x64.tar.gz -o node.tar.gz
-              tar -xzf node.tar.gz
-              mv node-v20.19.2-linux-x64 node20
-              export PATH=$PWD/node20/bin:$PATH
-            fi
+            echo "Installing Node tools..."
+            npm install -g mbt @sap/cds-dk
 
-            echo "Install global tools..."
-            npm install -g \
-              mbt \
-              @sap/cds-dk \
-              semantic-release \
-              @semantic-release/commit-analyzer \
-              @semantic-release/release-notes-generator \
-              @semantic-release/exec \
-              @semantic-release/git
-
-            echo "Install CF CLI..."
+            echo "Installing CF CLI..."
             curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&source=github" -o cf.tgz
             tar -xzf cf.tgz
-            chmod +x cf
-            mv cf /usr/local/bin/cf || true
+            mv cf /usr/local/bin/
+            chmod +x /usr/local/bin/cf
 
             cf version
             node -v
             npm -v
+            mbt --version
           '''
         }
       }
     }
 
     /* ----------------------------------------
-     * SEMANTIC RELEASE
+     * INSTALL SEMANTIC RELEASE
      * ---------------------------------------- */
-    stage('Semantic Release (dry-run)') {
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
-
+    stage('Install Semantic Release') {
       steps {
-        container('gh') {
-          unstash 'workspace'
+        container('sap-btp') {
+          sh '''
+            npm install semantic-release \
+              @semantic-release/commit-analyzer \
+              @semantic-release/release-notes-generator \
+              @semantic-release/exec \
+              @semantic-release/git
+          '''
+        }
+      }
+    }
 
+    /* ----------------------------------------
+     * SEMANTIC RELEASE (DRY RUN)
+     * ---------------------------------------- */
+    stage('Semantic Release') {
+      steps {
+        container('sap-btp') {
           withAwsSecret([
             secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN",
             type: "keyvalue"
@@ -122,54 +122,44 @@ pipeline {
             sh '''
               set -e
 
-              cd $REPOSITORY_NAME
-
+              echo "Configuring GitHub auth..."
               git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
 
-              semantic-release --dry-run > sr.log || true
+              echo "Running semantic-release..."
+              npm exec semantic-release -- --dry-run > sr.log || true
 
               VERSION=$(grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' sr.log | tail -1)
-              [ -z "$VERSION" ] && exit 1
 
-              echo "VERSION=$VERSION" > ../version.env
+              if [ -z "$VERSION" ]; then
+                echo "ERROR: Version not found"
+                exit 1
+              fi
+
+              echo "VERSION=$VERSION" > version.env
               echo "Next version: $VERSION"
             '''
           }
-
-          stash name: 'workspace', includes: '**', useDefaultExcludes: false
         }
       }
     }
 
     /* ----------------------------------------
-     * UPDATE MTA
+     * UPDATE MTA VERSION
      * ---------------------------------------- */
-    stage('Update MTA Version') {
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
-
+    stage('Update MTA') {
       steps {
-        container('gh') {
-          unstash 'workspace'
-
+        container('sap-btp') {
           sh '''
             set -e
 
             VERSION=$(cat version.env | sed 's/VERSION=//')
 
-            cd $REPOSITORY_NAME
+            cd ${REPOSITORY_NAME}
 
-            echo "Updating mta.yaml -> $VERSION"
+            echo "Updating mta.yaml to $VERSION"
 
             sed -i "s/^version: .*/version: $VERSION/" mta.yaml
           '''
-
-          stash name: 'workspace', includes: '**', useDefaultExcludes: false
         }
       }
     }
@@ -178,33 +168,18 @@ pipeline {
      * BUILD MTA
      * ---------------------------------------- */
     stage('Build MTA') {
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
-
       steps {
-        container('gh') {
-          unstash 'workspace'
-
+        container('sap-btp') {
           sh '''
             set -e
 
-            cd $REPOSITORY_NAME
+            cd ${REPOSITORY_NAME}
 
-            echo "Cleaning..."
             rm -rf mta_archives gen
 
             echo "Building MTAR..."
             mbt build -p cf -t mta_archives
-
-            ls -l mta_archives
           '''
-
-          stash name: 'workspace', includes: '**', useDefaultExcludes: false
         }
       }
     }
@@ -213,37 +188,26 @@ pipeline {
      * DEPLOY
      * ---------------------------------------- */
     stage('Deploy') {
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
-
       steps {
-        container('gh') {
-          unstash 'workspace'
-
+        container('sap-btp') {
           withCredentials([usernamePassword(
             credentialsId: 'cf-btp-trial',
             usernameVariable: 'CF_USER',
             passwordVariable: 'CF_PASSWORD'
           )]) {
-
             sh '''
               set -e
 
-              cd $REPOSITORY_NAME
+              cd ${REPOSITORY_NAME}
 
               cf login \
-                -a "$CF_API" \
-                -u "$CF_USER" \
-                -p "$CF_PASSWORD" \
+                -a $CF_API \
+                -u $CF_USER \
+                -p $CF_PASSWORD \
                 -o "$CF_ORG" \
-                -s "$CF_SPACE"
+                -s $CF_SPACE
 
-              cf install-plugin multiapps -f
+              cf install-plugin -f multiapps
 
               MTAR=$(ls mta_archives/*.mtar | head -n 1)
 
@@ -260,43 +224,29 @@ pipeline {
      * COMMIT & TAG
      * ---------------------------------------- */
     stage('Commit & Tag') {
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
-
       steps {
-        container('gh') {
-          unstash 'workspace'
-
+        container('sap-btp') {
           withCredentials([usernamePassword(
             credentialsId: 'github-token',
             usernameVariable: 'GIT_USER',
             passwordVariable: 'GIT_TOKEN'
           )]) {
-
             sh '''
               set -e
 
               VERSION=$(cat version.env | sed 's/VERSION=//')
 
-              cd $REPOSITORY_NAME
+              cd ${REPOSITORY_NAME}
 
               git config user.email "ci@jenkins"
               git config user.name "Jenkins CI"
 
-              git remote set-url origin https://$GIT_USER:$GIT_TOKEN@github.com/$GH_ORGANIZATION/$REPOSITORY_NAME.git
+              git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/KPICorporate/${REPOSITORY_NAME}.git
 
-              git fetch origin main
-              git checkout main
               git pull origin main
 
               git add mta.yaml
-
-              git commit -m "chore(release): $VERSION [skip ci]" || echo "No changes"
+              git commit -m "chore(release): $VERSION [skip ci]" || true
 
               git tag -f "v$VERSION"
 
