@@ -2,10 +2,11 @@ pipeline {
   agent {
     kubernetes(k8sAgent(
       cloud: 'kubernetes',
-      podTemplate: 'gh',
+      podTemplate: 'gh-sap-btp',   // 👈 deve contenere entrambi i container
       serviceAccount: 'jenkins'
     ))
   }
+
   options {
     ansiColor('xterm')
     disableConcurrentBuilds()
@@ -16,6 +17,10 @@ pipeline {
     CF_API   = 'https://api.cf.eu10-004.hana.ondemand.com'
     CF_ORG   = 'Kuwait Petroleum Italia S.p.A.'
     CF_SPACE = 'FlexibleV1'
+
+    GH_ORGANIZATION = 'KPICorporate'
+    REPOSITORY_NAME = 'sap-btp-cicd'
+    JENKINS_ENV     = "PROD"
   }
 
   stages {
@@ -24,187 +29,77 @@ pipeline {
      * CHECKOUT
      * ---------------------------------------- */
     stage('Checkout') {
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
-
-      environment {
-        GH_ORGANIZATION = 'KPICorporate'
-        REPOSITORY_NAME = 'sap-btp-cicd'
-        JENKINS_ENV = "PROD"
-      }
-
       steps {
         container('gh') {
           script {
-            try {
+            def repoUrl = "git@github.com:${env.GH_ORGANIZATION}/${env.REPOSITORY_NAME}.git"
+            def dkName  = ("AUT-PLAT-${env.JENKINS_ENV}-DK-${env.REPOSITORY_NAME}").toUpperCase()
 
-              // Costruzione variabili come da standard piattaforma
-              def repoUrl = "git@github.com:${env.GH_ORGANIZATION}/${env.REPOSITORY_NAME}.git"
-              def dkName  = ("AUT-PLAT-${env.JENKINS_ENV}-DK-${env.REPOSITORY_NAME}").toUpperCase()
-
-              cloneWithDK(
-                repo_url: repoUrl,
-                dk: dkName,
-                branch: "main"
-              ) {
-                dir("${env.REPOSITORY_NAME}") {
-                  env.COMMIT_HASH_APP = sh(
-                    script: "git log -n 1 --format='%h'",
-                    returnStdout: true
-                  ).trim()
-                }
+            cloneWithDK(
+              repo_url: repoUrl,
+              dk: dkName,
+              branch: "main"
+            ) {
+              dir("${env.REPOSITORY_NAME}") {
+                env.COMMIT_HASH_APP = sh(
+                  script: "git log -n 1 --format='%h'",
+                  returnStdout: true
+                ).trim()
               }
-
-              stash name: "${BUILD_TAG}",
-                    includes: "${env.REPOSITORY_NAME}/**",
-                    useDefaultExcludes: false
-
-            } catch (Exception e) {
-              sh 'exit 400'
-              error("Code checkout failed: ${e}")
             }
+
+            stash name: "source",
+                  includes: "${env.REPOSITORY_NAME}/**",
+                  useDefaultExcludes: false
           }
         }
       }
     }
-	
-	stage('Bootstrap Node 20') {
-		steps {
-			script {
-			runCmd(
-				'''
-				set -e
-
-        if [ ! -x "$WORKSPACE/node20/bin/node" ]; then
-          echo "Installing Node 20 locally..."
-
-          rm -rf "$WORKSPACE/node20"
-          mkdir -p "$WORKSPACE/node20"
-
-          curl -fsSL https://nodejs.org/dist/v20.19.2/node-v20.19.2-linux-x64.tar.gz -o node.tar.gz
-
-          tar -xzf node.tar.gz
-          mv node-v20.19.2-linux-x64/* "$WORKSPACE/node20/"
-        fi
-
-        export PATH=$WORKSPACE/node20/bin:$PATH
-
-        node -v
-        npm -v
-				''',
-
-				'''
-				$ErrorActionPreference = "Stop"
-
-				if (-Not (Test-Path "$env:WORKSPACE\\node20")) {
-
-				  Write-Host "Installing Node 20 locally..."
-
-			      Invoke-WebRequest `
-				   -Uri "https://nodejs.org/dist/v20.19.2/node-v20.19.2-win-x64.zip" `
-				   -OutFile node.zip
-
-				  Expand-Archive node.zip -DestinationPath $env:WORKSPACE
-
-				  Rename-Item `
-				    "$env:WORKSPACE\\node-v20.19.2-win-x64" `
-				    "$env:WORKSPACE\\node20"
-				}
-
-				$env:PATH="$env:WORKSPACE\\node20;$env:WORKSPACE\\node20\\node_modules\\npm\\bin;$env:PATH"
-
-				node -v
-				npm -v
-				'''
-			)
-		}
-	}
- }
 
     /* ----------------------------------------
-     * INSTALL DEPENDENCIES
-     * ---------------------------------------- */
-    stage('Install Semantic Release') {
-      steps {
-      script {
-        runCmd(
-          '''
-          export PATH=$WORKSPACE/node20/bin:$PATH
-
-          npm install semantic-release \
-            @semantic-release/commit-analyzer \
-            @semantic-release/release-notes-generator \
-            @semantic-release/exec \
-            @semantic-release/git
-          ''',
-
-          '''
-          $env:PATH="$env:WORKSPACE\\node20;$env:WORKSPACE\\node20\\node_modules\\npm\\bin;$env:PATH"
-
-          npm install semantic-release `
-            @semantic-release/commit-analyzer `
-            @semantic-release/release-notes-generator `
-            @semantic-release/exec `
-            @semantic-release/git
-          '''
-        )
-      }
-    }
-  }
-
-    /* ----------------------------------------
-     * SEMANTIC RELEASE (DRY RUN)
+     * SEMANTIC RELEASE
      * ---------------------------------------- */
     stage('Semantic Release (dry-run)') {
       steps {
         container('gh') {
+          unstash "source"
+
           withAwsSecret([
             secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
             type: "keyvalue"
           ]) {
 
-            script {
+            dir("${env.REPOSITORY_NAME}") {
 
-              env.GITHUB_TOKEN = env.GITHUB_TOKEN
-
-              runCmd(
-                '''
+              sh '''
                 set -e
 
+                export PATH=$WORKSPACE/node20/bin:$PATH
+
+                echo "Configuring Git auth..."
                 git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
 
+                echo "Installing dependencies..."
+                npm install
+
+                echo "Running semantic-release..."
                 npm exec semantic-release -- --dry-run > sr.log || true
 
                 VERSION=$(grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' sr.log | tail -1)
-                [ -z "$VERSION" ] && exit 1
+
+                if [ -z "$VERSION" ]; then
+                  echo "No version detected"
+                  exit 1
+                fi
 
                 echo "VERSION=$VERSION" > version.env
                 echo "Next version: $VERSION"
-                ''',
-
-                '''
-                $ErrorActionPreference = "Stop"
-
-                $env:PATH="$env:WORKSPACE\\node20;$env:WORKSPACE\\node20\\node_modules\\npm\\bin;$env:PATH"
-
-                npm exec semantic-release -- --dry-run > sr.log
-
-                $match = Select-String -Path sr.log -Pattern "\\d+\\.\\d+\\.\\d+"
-                if (-not $match) { exit 1 }
-
-                $version = $match.Matches[-1].Value
-                "VERSION=$version" | Out-File version.env -Encoding ascii
-
-                Write-Host "Next version: $version"
-                '''
-              )
+              '''
             }
           }
+
+          stash name: "version",
+                includes: "${env.REPOSITORY_NAME}/version.env"
         }
       }
     }
@@ -215,90 +110,24 @@ pipeline {
     stage('Update MTA Version') {
       steps {
         container('gh') {
-          script {
-            runCmd(
-              '''
+          unstash "source"
+          unstash "version"
+
+          dir("${env.REPOSITORY_NAME}") {
+
+            sh '''
               set -e
 
-              # leggo la versione dalla root del workspace
-              VERSION=$(cat "$WORKSPACE/version.env" | sed 's/VERSION=//')
+              VERSION=$(cat version.env | sed 's/VERSION=//')
 
-              echo "Version from file: $VERSION"
-
-              # entro nel repo
-              cd "$WORKSPACE/$REPOSITORY_NAME"
-
-              echo "Updating mta.yaml..."
+              echo "Updating MTA to $VERSION"
 
               sed -i "s/^version: .*/version: $VERSION/" mta.yaml
-              ''',
-
-              '''
-              $ErrorActionPreference = "Stop"
-
-              # leggo versione dal workspace
-              $version = (Get-Content "$env:WORKSPACE\\version.env") -replace "VERSION=", ""
-
-              Write-Host "Version from file: $version"
-
-              # entro nel repo
-              Set-Location "$env:WORKSPACE\\$env:REPOSITORY_NAME"
-
-              Write-Host "Updating mta.yaml..."
-
-              (Get-Content mta.yaml) `
-                -replace '^version: .*', "version: $version" |
-                Set-Content mta.yaml
-              '''
-            )
+            '''
           }
-        }
-      }
-    }
 
-    /* ----------------------------------------
-     * READ VERSION
-     * ---------------------------------------- */
-    stage('Read Version') {
-      steps {
-        script {
-
-          runCmd(
-            // UNIX
-            '''
-            set -e
-            grep '^version:' mta.yaml | cut -d' ' -f2 > version.txt
-            ''',
-
-            // WINDOWS
-            '''
-            $ErrorActionPreference = "Stop"
-            (Select-String '^version:' mta.yaml).ToString().Split(':')[1].Trim() | Out-File version.txt -Encoding ascii
-            '''
-          )
-
-          // Lettura file (cross-platform)
-          env.APP_VERSION = readFile('version.txt').trim()
-
-          echo "Versione finale: ${env.APP_VERSION}"
-        }
-      }
-    }
-
-    /* ----------------------------------------
-     * CLEAN WORKSPACE
-     * ---------------------------------------- */
-    stage('Clean Workspace') {
-      steps {
-        script {
-          runCmd(
-            'rm -rf gen mta_archives *.mtar',
-            '''
-            if (Test-Path gen) { Remove-Item -Recurse -Force gen }
-            if (Test-Path mta_archives) { Remove-Item -Recurse -Force mta_archives }
-            Remove-Item *.mtar -ErrorAction SilentlyContinue
-            '''
-          )
+          stash name: "updated-source",
+                includes: "${env.REPOSITORY_NAME}/**"
         }
       }
     }
@@ -308,59 +137,26 @@ pipeline {
      * ---------------------------------------- */
     stage('Build MTA') {
       steps {
-        script {
-          runCmd(
+        container('sap-btp') {
+          unstash "updated-source"
+
+          dir("${env.REPOSITORY_NAME}") {
+
+            sh '''
+              set -e
+
+              mbt --version
+
+              echo "Cleaning..."
+              rm -rf mta_archives gen
+
+              echo "Building MTAR..."
+              mbt build -p cf -t mta_archives
             '''
-            set -e
+          }
 
-            export PATH=$WORKSPACE/node20/bin:$PATH
-
-            if ! command -v mbt >/dev/null 2>&1; then
-              echo "Installing MBT..."
-              npm install -g mbt
-            fi
-
-            mbt --version
-
-            echo "Cleaning previous build..."
-            rm -rf mta_archives gen
-
-            echo "Building MTAR..."
-            mbt build -p cf -t mta_archives
-            ''',
-
-            '''
-            $ErrorActionPreference = "Stop"
-
-            $env:PATH="$env:WORKSPACE\\node20;$env:WORKSPACE\\node20\\node_modules\\npm\\bin;$env:PATH"
-
-            if (-not (Get-Command mbt -ErrorAction SilentlyContinue)) {
-              Write-Host "Installing MBT..."
-              npm install -g mbt
-            }
-
-            mbt --version
-
-            if (-not (Get-Command make -ErrorAction SilentlyContinue)) {
-
-              if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-                  throw "Chocolatey non trovato"
-              }
-
-              Write-Host "Installing GNU Make via Chocolatey..."
-
-              choco install make -y --no-progress
-
-              # refresh PATH per il job corrente
-              $env:PATH += ";C:\\ProgramData\\chocolatey\\bin"
-            }
-
-            make --version
-            mbt --version
-
-            mbt build -p cf -t mta_archives
-            '''
-          )
+          stash name: "mtar",
+                includes: "${env.REPOSITORY_NAME}/mta_archives/*.mtar"
         }
       }
     }
@@ -370,90 +166,39 @@ pipeline {
      * ---------------------------------------- */
     stage('Deploy') {
       steps {
+        container('sap-btp') {
+          unstash "updated-source"
+          unstash "mtar"
 
-        withCredentials([usernamePassword(
-          credentialsId: 'cf-btp-trial',
-          usernameVariable: 'CF_USER',
-          passwordVariable: 'CF_PASSWORD'
-        )]) {
+          withCredentials([usernamePassword(
+            credentialsId: 'cf-btp-trial',
+            usernameVariable: 'CF_USER',
+            passwordVariable: 'CF_PASSWORD'
+          )]) {
 
-          script {
+            dir("${env.REPOSITORY_NAME}") {
 
-            runCmd(
+              sh '''
+                set -e
+
+                cf version
+
+                cf install-plugin -f multiapps || true
+
+                MTAR=$(ls mta_archives/*.mtar | head -n 1)
+
+                echo "Logging into BTP..."
+                cf login \
+                  -a $CF_API \
+                  -u $CF_USER \
+                  -p $CF_PASSWORD \
+                  -o "$CF_ORG" \
+                  -s $CF_SPACE
+
+                echo "Deploying $MTAR"
+                cf deploy $MTAR -f
               '''
-              set -e
-
-              export PATH=$WORKSPACE/node20/bin:$PATH
-
-              echo "Installing CF CLI..."
-
-              if [ ! -f "$WORKSPACE/cf" ]; then
-                curl -L \
-                "https://packages.cloudfoundry.org/stable?release=linux64-binary&source=github" \
-                -o cf.tgz
-
-                tar -xzf cf.tgz
-                chmod +x cf
-                mv cf $WORKSPACE/cf
-              fi
-
-              export PATH=$WORKSPACE:$PATH
-
-              cf version
-
-              cf install-plugin -f multiapps
-
-              MTAR=$(ls mta_archives/*.mtar | head -n 1)
-
-              echo "Logging into BTP..."
-
-              cf login \
-                -a $CF_API \
-                -u $CF_USER \
-                -p $CF_PASSWORD \
-                -o $CF_ORG \
-                -s $CF_SPACE
-
-              echo "Deploying $MTAR"
-
-              cf deploy $MTAR -f
-              ''',
-
-              '''
-              $ErrorActionPreference = "Stop"
-
-              # Aggiungi CF CLI al PATH
-              $cfPath = "C:\\Program Files\\Cloud Foundry"
-
-              if (Test-Path "$cfPath\\cf.exe") {
-                  $env:PATH="$cfPath;$env:PATH"
-              } else {
-                  throw "CF CLI non trovata in $cfPath"
-              }
-
-              cf version
-
-              cf install-plugin -f multiapps
-
-              $mtar = (
-                Get-ChildItem mta_archives\\*.mtar |
-                Select-Object -First 1
-              ).FullName
-
-              Write-Host "Logging into BTP..."
-
-              cf login `
-                -a $env:CF_API `
-                -u $env:CF_USER `
-                -p $env:CF_PASSWORD `
-                -o $env:CF_ORG `
-                -s $env:CF_SPACE
-
-              Write-Host "Deploying $mtar"
-
-              cf deploy $mtar -f
-              '''
-            )
+            }
           }
         }
       }
@@ -462,102 +207,44 @@ pipeline {
     /* ----------------------------------------
      * COMMIT & TAG
      * ---------------------------------------- */
-    stage('Commit & Tag (after deploy)') {
+    stage('Commit & Tag') {
       steps {
-        withCredentials([usernamePassword(
-          credentialsId: 'github-token',
-          usernameVariable: 'GIT_USER',
-          passwordVariable: 'GIT_TOKEN'
-    )]) {
-          script {
+        container('gh') {
+          unstash "updated-source"
+          unstash "version"
 
-            runCmd(
-              // =======================
-              // LINUX (sh)
-              // =======================
+          withCredentials([usernamePassword(
+            credentialsId: 'github-token',
+            usernameVariable: 'GIT_USER',
+            passwordVariable: 'GIT_TOKEN'
+          )]) {
+
+            dir("${env.REPOSITORY_NAME}") {
+
+              sh '''
+                set -e
+
+                VERSION=$(cat version.env | sed 's/VERSION=//')
+
+                git config user.email "ci@jenkins"
+                git config user.name "Jenkins CI"
+
+                git remote set-url origin https://$GIT_USER:$GIT_TOKEN@github.com/KPICorporate/sap-btp-cicd.git
+
+                git pull origin main
+
+                git add mta.yaml
+                git commit -m "chore(release): $VERSION [skip ci]" || true
+
+                git tag -f "v$VERSION"
+
+                git push origin main
+                git push origin --tags
               '''
-              set -e
-
-              VERSION=$(cat version.env | sed 's/VERSION=//')
-
-              echo ">>> Using version: $VERSION"
-
-              git config user.email "ci@jenkins"
-              git config user.name "Jenkins CI"
-
-              echo ">>> Switching to HTTPS remote with token"
-              git remote set-url origin https://$GIT_USER:$GIT_TOKEN@github.com/KPICorporate/sap-btp-wflibero2-workflow-cicd.git
-
-              echo ">>> Sync with remote"
-              git fetch origin main
-              git checkout main
-              git pull origin main
-
-              echo ">>> Commit version $VERSION"
-              git add mta.yaml
-
-              git commit -m "chore(release): $VERSION [skip ci]" || echo "No changes to commit"
-
-              echo ">>> Create/Update tag"
-              git tag -f "v$VERSION"
-
-              echo ">>> Push"
-              git push origin main
-              git push origin --tags
-              ''',
-
-              // =======================
-              // WINDOWS (powershell)
-              // =======================
-              '''
-              $ErrorActionPreference = "Stop"
-
-              $version = (Get-Content version.env) -replace "VERSION=", ""
-
-              Write-Host ">>> Using version: $version"
-
-              git config user.email "ci@jenkins"
-              git config user.name "Jenkins CI"
-
-              Write-Host ">>> Switching to HTTPS remote with token"
-              git remote set-url origin https://github.com/KPICorporate/sap-btp-wflibero2-workflow-cicd.git
-
-              Write-Host ">>> Sync with remote"
-              git fetch origin main
-              git checkout main
-              git pull origin main
-
-              Write-Host ">>> Commit version $version"
-
-              git add mta.yaml
-
-              git commit -m "chore(release): $version [skip ci]"
-              if ($LASTEXITCODE -ne 0) {
-                Write-Host "No changes to commit"
-              }
-
-              Write-Host ">>> Create/Update tag"
-              git tag -f "v$version"
-
-              Write-Host ">>> Push"
-              git push origin main
-              git push origin --tags
-              '''
-            )
-         }
-       }
-     }
-   }
- }
-}
-
-/* ----------------------------------------
- * HELPER FUNCTION
- * ---------------------------------------- */
-def runCmd(unixCmd, winCmd) {
-  if (isUnix()) {
-    sh unixCmd
-  } else {
-    powershell winCmd
+            }
+          }
+        }
+      }
+    }
   }
 }
