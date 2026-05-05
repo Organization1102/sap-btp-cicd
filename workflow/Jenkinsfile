@@ -163,18 +163,22 @@ pipeline {
     stage('Semantic Release (dry-run)') {
       steps {
         container('gh') {
-        withAwsSecret([
-          secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
-          type: "keyvalue"
-         ]) {
+          withAwsSecret([
+            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+            type: "keyvalue"
+          ]) {
 
-           script {
+            script {
 
               env.GITHUB_TOKEN = env.GITHUB_TOKEN
 
-              sh '''
+              runCmd(
+                '''
+                set -e
+
                 git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
-                npx semantic-release --dry-run
+
+                npx semantic-release --dry-run > sr.log || true
 
                 VERSION=$(grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' sr.log | tail -1)
                 [ -z "$VERSION" ] && exit 1
@@ -184,6 +188,8 @@ pipeline {
                 ''',
 
                 '''
+                $ErrorActionPreference = "Stop"
+
                 $env:PATH="$env:WORKSPACE\\node20;$env:WORKSPACE\\node20\\node_modules\\npm\\bin;$env:PATH"
 
                 npx semantic-release --dry-run > sr.log
@@ -196,6 +202,7 @@ pipeline {
 
                 Write-Host "Next version: $version"
                 '''
+              )
             }
           }
         }
