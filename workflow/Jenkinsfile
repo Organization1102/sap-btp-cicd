@@ -61,7 +61,7 @@ pipeline {
      * ---------------------------------------- */
     stage('Semantic Release (dry-run)') {
       steps {
-        container('gh') {
+        container('sap-btp') {
           unstash "source"
 
           withAwsSecret([
