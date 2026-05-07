@@ -104,6 +104,11 @@ pipeline {
 
               dir("${env.REPOSITORY_NAME}") {
 
+                sh '''
+                  node -v
+                  npm -v
+                '''
+
                 sh """
                   git remote set-url origin \
                     https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
@@ -121,9 +126,6 @@ pipeline {
 
                   sh '''
 					          set -e
-
-					          node -v
-					          npm -v
 
 					          echo "Installing semantic-release"
 
@@ -143,14 +145,11 @@ pipeline {
                       @semantic-release/commit-analyzer \
                       @semantic-release/release-notes-generator \
                       @semantic-release/git \
-
 					          > semantic.log 2>&1 || true
 
 					        cat semantic.log
 
-					        VERSION=$(grep -E 'next release version is|The next release version is' semantic.log \
-					        | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' \
-					        | tail -1)
+					        VERSION=$(grep 'next release version is' semantic.log | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | tail -1)
 
 					        [ -z "$VERSION" ] && {
 					          echo "Unable to detect semantic version"
@@ -158,7 +157,6 @@ pipeline {
 					        }
 
 					        echo "VERSION=$VERSION" > version.env
-
 					        echo "Next version: $VERSION"
 				        '''
                 }
