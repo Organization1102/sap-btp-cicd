@@ -143,7 +143,6 @@ stage('Semantic Release (dry-run)') {
                 @semantic-release/exec \
                 @semantic-release/git \
                 @semantic-release/github \
-                @semantic-release/npm
 
               echo "======================================="
               echo "Running semantic-release"
