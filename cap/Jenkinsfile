@@ -253,7 +253,7 @@ pipeline {
 
 			  MTA_FILE="cap/mta.yaml"
 
-			  npm version $VERSION --no-git-tag-version
+			  ls -la cap
 
 			  if grep -q "^version:" "$MTA_FILE"; then
 			    sed -i "s/^version:.*/version: $VERSION/" "$MTA_FILE"
