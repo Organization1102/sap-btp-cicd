@@ -114,13 +114,6 @@ stage('Semantic Release (dry-run)') {
               node -v
               npm -v
 
-              echo "======================================="
-              echo "Checkout main"
-              echo "======================================="
-
-              git fetch --all
-              git checkout main
-              git reset --hard origin/main
             '''
 
             sh """
