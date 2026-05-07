@@ -1,0 +1,77 @@
+_schema-version: '3.1'
+ID: kupit-flexiblewf-cap
+description: Database for Flexible Workflow
+version: 1.0.2
+modules:
+  - name: kupit-flexiblewf-cap-srv
+    type: nodejs
+    path: gen/srv
+    requires:
+      - name: kupit-flexiblewf-cap-auth
+      - name: kupit-flexiblewf-cap-db
+      - name: kupit-flexiblewf-cap-dest
+    provides:
+      - name: srv-api
+        properties:
+          srv-url: '${default-url}'
+    parameters:
+      buildpack: nodejs_buildpack
+      stack: cflinuxfs4
+      disk-quota: 1024M
+      memory: 256M
+    build-parameters:
+      builder: npm-ci
+    properties:
+      dmsObjectId: cced45800051661196a47846
+      dmsRepositoryId: ca9d9a8e-9e11-4c84-8cd9-50b61f5d0048
+      adGroupId: 8e84cd39-cff1-4f10-bc32-4baab2efb977
+  - name: kupit-flexiblewf-cap-db-deployer
+    type: hdb
+    path: gen/db
+    requires:
+      - name: kupit-flexiblewf-cap-db
+    parameters:
+      buildpack: nodejs_buildpack
+      stack: cflinuxfs4
+  - name: kupit-flexiblewf-cap-approuter
+    type: approuter.nodejs
+    path: app
+    requires:
+      - name: kupit-flexiblewf-cap-auth
+      - name: srv-api
+        group: destinations
+        properties:
+          name: srv-api
+          url: '~{srv-url}'
+          timeout: 60000
+          forwardAuthToken: true
+    parameters:
+      stack: cflinuxfs4
+      disk-quota: 256M
+      memory: 256M
+resources:
+  - name: kupit-flexiblewf-cap-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      config:
+        tenant-mode: dedicated
+      path: ./xs-security.json
+      service: xsuaa
+      service-plan: application
+  - name: kupit-flexiblewf-cap-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+  - name: kupit-flexiblewf-cap-dest
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+parameters:
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npx -p @sap/cds-dk cds build --production

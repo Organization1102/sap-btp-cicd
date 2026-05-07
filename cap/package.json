@@ -1,0 +1,69 @@
+{
+  "name": "kupit-flexiblewf-cap",
+  "version": "1.0.2",
+  "description": "CAP for WF Libero",
+  "repository": "<Add your repository here>",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "dayjs": "^1.11.10",
+    "@sap/audit-logging": "^6.1.0",
+    "@sap/cds": "^7.2.0",
+    "@sap/cds-dk": "^7.2.0",
+    "@sap/cds-odata-v2-adapter-proxy": "^1.9.21",
+    "@sap-cloud-sdk/http-client": "^3.9.0",
+    "@sap-cloud-sdk/connectivity": "^3.9.0",
+    "@sap/hana-client": "^2.18.22",
+    "@sap/xsenv": "^6.1.0",
+    "@sap/xssec": "^3.6.0",
+    "express": "^4.18.2",
+    "passport": "^0.6.0",
+    "html-pdf": "^3.0.1",
+    "sap-cf-mailer": "^0.0.5",
+    "sap-cf-axios": "^0.4.8"
+  },
+  "devDependencies": {
+    "sqlite3": "^5.1.4"
+  },
+  "scripts": {
+    "start": "cds run"
+  },
+  "engines": {
+    "node": "^20"
+  },
+  "eslintConfig": {
+    "extends": "eslint:recommended",
+    "env": {
+      "es2020": true,
+      "node": true,
+      "jest": true,
+      "mocha": true
+    },
+    "globals": {
+      "SELECT": true,
+      "INSERT": true,
+      "UPDATE": true,
+      "DELETE": true,
+      "CREATE": true,
+      "DROP": true,
+      "CDL": true,
+      "CQL": true,
+      "CXL": true,
+      "cds": true
+    },
+    "rules": {
+      "no-console": "off",
+      "require-atomic-updates": "off"
+    }
+  },
+  "cds": {
+    "requires": {
+      "db": {
+        "kind": "hana-cloud"
+      },
+      "auth": {
+        "kind": "xsuaa"
+      }
+    }
+  }
+}
