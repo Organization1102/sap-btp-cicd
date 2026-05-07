@@ -192,7 +192,7 @@ stage('Semantic Release (dry-run)') {
           unstash 'source'
           unstash 'version'
 
-          dir("${env.REPOSITORY_NAME}") {
+          dir('sap-btp-cicd') {
 
             sh '''
               set -e
@@ -216,7 +216,7 @@ stage('Semantic Release (dry-run)') {
 
           stash(
             name: 'updated-source',
-            includes: "${env.REPOSITORY_NAME}/**",
+            includes: '**',
             useDefaultExcludes: false
           )
         }
