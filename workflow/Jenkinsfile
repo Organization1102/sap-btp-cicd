@@ -277,7 +277,7 @@ stage('Semantic Release (dry-run)') {
 
           stash(
             name: 'mtar',
-            includes: "mta_archives/*.mtar",
+            includes: "${env.REPOSITORY_NAME}/workflow/mta_archives/*.mtar",
             useDefaultExcludes: false
           )
         }
@@ -312,7 +312,7 @@ stage('Semantic Release (dry-run)') {
             )
           ]) {
 
-            dir("workflow") {
+            dir("${env.REPOSITORY_NAME}/workflow") {
 
               sh '''
                 set -e
