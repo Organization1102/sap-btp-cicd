@@ -53,7 +53,7 @@ pipeline {
               ]
             ) {
 
-              dir('workflow') {
+              dir("${env.REPOSITORY_NAME}") {
 
                 env.COMMIT_HASH_APP = sh(
                   script: "git log -n 1 --format='%h'",
