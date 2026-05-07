@@ -137,6 +137,11 @@ pipeline {
                       --branches main \
                       --dry-run \
                       --no-ci \
+                      --plugins \
+                        @semantic-release/commit-analyzer \
+                        @semantic-release/release-notes-generator \
+                        @semantic-release/git \
+
                       > semantic.log 2>&1 || true
 
                     cat semantic.log
