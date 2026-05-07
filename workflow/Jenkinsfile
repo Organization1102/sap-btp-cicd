@@ -103,7 +103,7 @@ stage('Semantic Release (dry-run)') {
 
           dir("${env.REPOSITORY_NAME}") {
 
-            sh """
+            sh '''
               set -e
 
               echo "======================================="
@@ -159,18 +159,18 @@ stage('Semantic Release (dry-run)') {
               cat sr.log
 
               VERSION=$(grep -oE 'next release version is [0-9]+\.[0-9]+\.[0-9]+' sr.log \
-                | awk '{print \$5}' \
+                | awk '{print $5}' \
                 | tail -1)
 
               if [ -z "$VERSION" ]; then
                 VERSION=$(grep -oE 'the next release version is [0-9]+\.[0-9]+\.[0-9]+' sr.log \
-                  | awk '{print \$6}' \
+                  | awk '{print $6}' \
                   | tail -1)
               fi
 
               echo "VERSION=$VERSION" > version.env
               echo "Detected version: $VERSION"
-            """
+            '''
           }
         }
       }
