@@ -78,6 +78,7 @@ pipeline {
     }
 
 stage('Semantic Release (dry-run)') {
+
   agent {
     kubernetes(k8sAgent(
       cloud: 'kubernetes',
@@ -87,9 +88,10 @@ stage('Semantic Release (dry-run)') {
   }
 
   steps {
+
     container('sap-btp') {
 
-      unstash "source"
+      unstash 'source'
 
       withAwsSecret([
         secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
@@ -98,12 +100,11 @@ stage('Semantic Release (dry-run)') {
 
         script {
 
-          // Q8 secret wrapper
-          def githubToken = "$env.token"
+          def githubToken = env.token
 
           dir("${env.REPOSITORY_NAME}") {
 
-            sh """
+            sh '''
               set -e
 
               echo "======================================="
@@ -114,70 +115,76 @@ stage('Semantic Release (dry-run)') {
               npm -v
 
               echo "======================================="
-              echo "Configuring Git HTTPS"
+              echo "Checkout main"
               echo "======================================="
 
+              git fetch --all
+              git checkout main
+              git reset --hard origin/main
+            '''
+
+            sh """
               git remote set-url origin \
-                https://${githubToken}@github.com/KPICorporate/${REPOSITORY_NAME}.git
+                https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
+            """
 
-              git remote -v
+            withEnv([
+              "GITHUB_TOKEN=${githubToken}",
+              "GH_TOKEN=${githubToken}",
+              "GIT_BRANCH=main",
+              "BRANCH_NAME=main"
+            ]) {
 
-              echo "======================================="
-              echo "Export GitHub token"
-              echo "======================================="
+              sh '''
+                set -e
 
-              export GITHUB_TOKEN=${githubToken}
-              export GH_TOKEN=${githubToken}
+                echo "======================================="
+                echo "Install semantic-release"
+                echo "======================================="
 
-              export GIT_BRANCH=main
-              export BRANCH_NAME=main
-
-              echo "======================================="
-              echo "Installing semantic-release"
-              echo "======================================="
-
-              npm install \
-                semantic-release \
-                @semantic-release/commit-analyzer \
-                @semantic-release/release-notes-generator \
-                @semantic-release/exec \
-                @semantic-release/git \
-
-              echo "======================================="
-              echo "Running semantic-release"
-              echo "======================================="
-
-              npx semantic-release \
-                --branches main \
-                --dry-run \
-                --plugins \
+                npm install --no-save \
+                  semantic-release \
                   @semantic-release/commit-analyzer \
                   @semantic-release/release-notes-generator \
-                  @semantic-release/git \
-                > sr.log 2>&1 || true
+                  @semantic-release/git
+              '''
 
-              cat sr.log
+              def semanticOutput = sh(
+                script: '''
+                  npx semantic-release \
+                    --branches main \
+                    --dry-run \
+                    --plugins \
+                      @semantic-release/commit-analyzer \
+                      @semantic-release/release-notes-generator \
+                      @semantic-release/git
+                ''',
+                returnStdout: true
+              ).trim()
 
-              VERSION=$(cat sr.log \
-                | grep "next release version is" \
-                | sed -E 's/.*next release version is ([0-9]+\\.[0-9]+\\.[0-9]+).*/\\1/' \
-                | tail -1)
+              echo semanticOutput
 
-              if [ -z "$VERSION" ]; then
-                echo "ERROR: Unable to detect next version"
-                exit 1
-              fi
+              def matcher = semanticOutput =~ /next release version is ([0-9]+\\.[0-9]+\\.[0-9]+)/
 
-              echo "Detected version: $VERSION"
+              if (!matcher.find()) {
+                error("Unable to detect semantic-release version")
+              }
 
-              echo "VERSION=$VERSION" > version.env
-            """
+              def version = matcher.group(1)
+
+              echo "Detected version: ${version}"
+
+              writeFile(
+                file: 'version.env',
+                text: "VERSION=${version}\n"
+              )
+            }
           }
         }
       }
 
       stash(
-        name: "version",
+        name: 'version',
         includes: "${env.REPOSITORY_NAME}/version.env"
       )
     }
