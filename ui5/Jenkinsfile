@@ -239,7 +239,7 @@ sh '''
 
           unstash 'updated-source'
 
-          dir("${env.REPOSITORY_NAME/ui5}") {
+          dir("${env.REPOSITORY_NAME}/ui5") {
 
             sh '''
               set -e
