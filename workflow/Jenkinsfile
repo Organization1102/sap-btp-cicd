@@ -166,7 +166,7 @@ stage('Semantic Release (dry-run)') {
 
       stash(
         name: 'version',
-        includes: ${env.REPOSITORY_NAME}/version.env
+        includes: "${env.REPOSITORY_NAME}/version.env"
       )
     }
   }
