@@ -150,7 +150,6 @@ stage('Semantic Release (dry-run)') {
               npx semantic-release \
                 --branches main \
                 --dry-run \
-                --extends [] \
                 --plugins \
                   @semantic-release/commit-analyzer \
                   @semantic-release/release-notes-generator \
