@@ -115,6 +115,8 @@ pipeline {
                   "GIT_BRANCH=main",
                   "BRANCH_NAME=main",
                   "CI=true"
+                  "NO_COLOR=1",
+                  "FORCE_COLOR=0"
                 ]) {
 
                   sh '''
