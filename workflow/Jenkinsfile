@@ -102,7 +102,7 @@ stage('Semantic Release (dry-run)') {
 
           def githubToken = env.token
 
-          dir('workflow') {
+          dir("${env.REPOSITORY_NAME}") {
 
             sh '''
               node -v
@@ -192,7 +192,7 @@ stage('Semantic Release (dry-run)') {
           unstash 'source'
           unstash 'version'
 
-          dir('workflow') {
+          dir("${env.REPOSITORY_NAME}") {
 
             sh '''
               set -e
@@ -201,7 +201,7 @@ stage('Semantic Release (dry-run)') {
 
               echo "Updating mta.yaml to version $VERSION"
 
-              MTA_FILE="mta.yaml"
+              MTA_FILE="workflow/mta.yaml"
 
               ls -la workflow
 
@@ -242,7 +242,7 @@ stage('Semantic Release (dry-run)') {
 
           unstash 'updated-source'
 
-          dir('workflow') {
+          dir("${env.REPOSITORY_NAME}") {
 
             sh '''
               set -e
@@ -312,7 +312,7 @@ stage('Semantic Release (dry-run)') {
             )
           ]) {
 
-            dir('workflow') {
+            dir("${env.REPOSITORY_NAME}") {
 
               sh '''
                 set -e
@@ -329,7 +329,7 @@ stage('Semantic Release (dry-run)') {
 
                 cf install-plugin -f multiapps || true
 
-                MTAR=$(ls mta_archives/*.mtar | head -n 1)
+                MTAR=$(ls workflow/mta_archives/*.mtar | head -n 1)
 
                 echo "================================================="
                 echo "Login to SAP BTP"
