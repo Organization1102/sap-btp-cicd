@@ -77,9 +77,6 @@ pipeline {
       }
     }
 
-/* ----------------------------------------
- * SEMANTIC RELEASE
- * ---------------------------------------- */
 stage('Semantic Release (dry-run)') {
   agent {
     kubernetes(k8sAgent(
@@ -95,88 +92,78 @@ stage('Semantic Release (dry-run)') {
       unstash "source"
 
       withAwsSecret([
-        secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN",
+        secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
         type: "keyvalue"
       ]) {
 
-        dir("${env.REPOSITORY_NAME}") {
+        script {
 
-          sh '''
-            set -e
+          // Q8 secret wrapper
+          def githubToken = "$env.token"
 
-            echo "======================================="
-            echo "Node / NPM"
-            echo "======================================="
+          dir("${env.REPOSITORY_NAME}") {
 
-            node -v
-            npm -v
+            sh """
+              set -e
 
-            echo "======================================="
-            echo "Current Git remote"
-            echo "======================================="
+              echo "======================================="
+              echo "Node / NPM"
+              echo "======================================="
 
-            git remote -v
+              node -v
+              npm -v
 
-            echo "======================================="
-            echo "Switching remote to HTTPS"
-            echo "======================================="
+              echo "======================================="
+              echo "Configuring Git HTTPS"
+              echo "======================================="
 
-            git remote set-url origin \
-              https://${GITHUB_TOKEN}@github.com/KPICorporate/${REPOSITORY_NAME}.git
+              git remote set-url origin \
+                https://${githubToken}@github.com/KPICorporate/${REPOSITORY_NAME}.git
 
-            git remote -v
+              git remote -v
 
-            echo "======================================="
-            echo "Export GitHub token"
-            echo "======================================="
+              echo "======================================="
+              echo "Export GitHub token"
+              echo "======================================="
 
-            export GITHUB_TOKEN=${GITHUB_TOKEN}
-            export GH_TOKEN=${GITHUB_TOKEN}
+              export GITHUB_TOKEN=${githubToken}
+              export GH_TOKEN=${githubToken}
 
-            echo "======================================="
-            echo "Installing semantic-release"
-            echo "======================================="
+              echo "======================================="
+              echo "Installing semantic-release"
+              echo "======================================="
 
-            npm install \
-              semantic-release \
-              @semantic-release/commit-analyzer \
-              @semantic-release/release-notes-generator \
-              @semantic-release/exec \
-              @semantic-release/git \
-              @semantic-release/github \
-              @semantic-release/npm
+              npm install \
+                semantic-release \
+                @semantic-release/commit-analyzer \
+                @semantic-release/release-notes-generator \
+                @semantic-release/exec \
+                @semantic-release/git \
+                @semantic-release/github \
+                @semantic-release/npm
 
-            echo "======================================="
-            echo "Running semantic-release dry-run"
-            echo "======================================="
+              echo "======================================="
+              echo "Running semantic-release"
+              echo "======================================="
 
-            npx semantic-release --dry-run > sr.log 2>&1 || true
+              npx semantic-release --dry-run > sr.log 2>&1 || true
 
-            echo "======================================="
-            echo "semantic-release output"
-            echo "======================================="
+              cat sr.log
 
-            cat sr.log
+              VERSION=\$(grep -Eo 'next release version is [0-9]+\\\\.[0-9]+\\\\.[0-9]+' sr.log \
+                | awk '{print \$5}' \
+                | tail -1)
 
-            echo "======================================="
-            echo "Extracting version"
-            echo "======================================="
+              if [ -z "\$VERSION" ]; then
+                echo "ERROR: Unable to detect next version"
+                exit 1
+              fi
 
-            VERSION=$(grep -Eo 'next release version is [0-9]+\\.[0-9]+\\.[0-9]+' sr.log \
-              | awk '{print $5}' \
-              | tail -1)
+              echo "VERSION=\$VERSION" > version.env
 
-            if [ -z "$VERSION" ]; then
-              echo "ERROR: Unable to detect next version"
-              exit 1
-            fi
-
-            echo "VERSION=$VERSION" > version.env
-
-            echo "======================================="
-            echo "Detected version: $VERSION"
-            echo "======================================="
-          '''
+              echo "Detected version: \$VERSION"
+            """
+          }
         }
       }
 
