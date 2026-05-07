@@ -53,7 +53,7 @@ pipeline {
               ]
             ) {
 
-              dir("${env.REPOSITORY_NAME}") {
+              dir('workflow') {
 
                 env.COMMIT_HASH_APP = sh(
                   script: "git log -n 1 --format='%h'",
@@ -69,7 +69,7 @@ pipeline {
 
             stash(
               name: 'source',
-              includes: "${env.REPOSITORY_NAME}/**",
+              includes: '**',
               useDefaultExcludes: false
             )
           }
@@ -102,7 +102,7 @@ stage('Semantic Release (dry-run)') {
 
           def githubToken = env.token
 
-          dir("${env.REPOSITORY_NAME}") {
+          dir('workflow') {
 
             sh '''
               node -v
@@ -166,7 +166,7 @@ stage('Semantic Release (dry-run)') {
 
       stash(
         name: 'version',
-        includes: "${env.REPOSITORY_NAME}/version.env"
+        includes: 'workflow/version.env'
       )
     }
   }
@@ -192,7 +192,7 @@ stage('Semantic Release (dry-run)') {
           unstash 'source'
           unstash 'version'
 
-          dir('sap-btp-cicd') {
+          dir('workflow') {
 
             sh '''
               set -e
@@ -201,7 +201,7 @@ stage('Semantic Release (dry-run)') {
 
               echo "Updating mta.yaml to version $VERSION"
 
-              MTA_FILE="workflow/mta.yaml"
+              MTA_FILE="mta.yaml"
 
               ls -la workflow
 
@@ -242,7 +242,7 @@ stage('Semantic Release (dry-run)') {
 
           unstash 'updated-source'
 
-          dir("${env.REPOSITORY_NAME}/workflow") {
+          dir('workflow') {
 
             sh '''
               set -e
@@ -277,7 +277,7 @@ stage('Semantic Release (dry-run)') {
 
           stash(
             name: 'mtar',
-            includes: 'mta_archives/*.mtar',
+            includes: 'workflow/mta_archives/*.mtar',
             useDefaultExcludes: false
           )
         }
@@ -312,7 +312,7 @@ stage('Semantic Release (dry-run)') {
             )
           ]) {
 
-            dir("${env.REPOSITORY_NAME}/workflow") {
+            dir('workflow') {
 
               sh '''
                 set -e
