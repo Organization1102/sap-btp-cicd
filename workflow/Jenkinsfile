@@ -242,7 +242,7 @@ stage('Semantic Release (dry-run)') {
 
           unstash 'updated-source'
 
-          dir("workflow") {
+          dir("${env.REPOSITORY_NAME}/workflow") {
 
             sh '''
               set -e
