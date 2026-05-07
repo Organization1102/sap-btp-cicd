@@ -1,0 +1,75 @@
+[
+  {
+    "_version": "3.0",
+    "identification": {
+      "id": "flexibleWFId",
+      "title": "{{title}}",
+      "entityType": "catalog"
+    },
+    "payload": {
+      "viz": [
+        {
+          "appId": "kupit.flexiblewf.myinbox",
+          "vizId": "kupit-flexiblewf-myinbox-inbound"
+        }
+      ]
+    },
+    "texts": [
+      {
+        "locale": "",
+        "textDictionary": {
+          "title": "Flexible WF Catalog"
+        }
+      }
+    ]
+  },
+  {
+    "_version": "3.0",
+    "identification": {
+      "id": "flexibleWFId",
+      "title": "{{title}}",
+      "entityType": "group"
+    },
+    "payload": {
+      "viz": [
+        {
+          "appId": "kupit.flexiblewf.myinbox",
+          "vizId": "kupit-flexiblewf-myinbox-inbound"
+        }
+      ]
+    },
+    "texts": [
+      {
+        "locale": "",
+        "textDictionary": {
+          "title": "Flexible WF Group"
+        }
+      }
+    ]
+  },
+  {
+    "_version": "3.0",
+    "identification": {
+      "id": "wz_flexibleWFUser",
+      "entityType": "role",
+      "title": "Flexible WF Role"
+    },
+    "payload": {
+      "apps": [
+        {
+          "id": "kupit.flexiblewf.myinbox"
+        }
+      ],
+      "catalogs": [
+        {
+          "id": "myinboxCatalogId"
+        }
+      ],
+      "groups": [
+        {
+          "id": "myinboxGroupId"
+        }
+      ]
+    }
+  }
+]

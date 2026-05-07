@@ -1,0 +1,23 @@
+<core:FragmentDefinition
+    xmlns:core="sap.ui.core"
+    controllerName="kupit.flexiblewf.myinbox.controller.SelectDialog1"
+    xmlns="sap.m"
+>
+    <SelectDialog
+        items="{/UtentiSCP}"
+        id="sap_m_SelectDialog_0"
+        title="Select User"
+        growingThreshold="100"
+        liveChange="_onSelectDialogLiveChange"
+    >
+        <items>
+            <StandardListItem
+                icon="sap-icon://notes"
+                title="User: {userPrincipalName}"
+                description="{surname} {givenName}"
+                info="{currentEmail}"
+                infoState="None"
+            />
+        </items>
+    </SelectDialog>
+</core:FragmentDefinition>

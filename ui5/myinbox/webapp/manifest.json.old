@@ -1,0 +1,229 @@
+{
+	"_version": "1.8.0",
+	"sap.app": {
+		"_version": "1.3.0",
+		"id": "kupit.flexiblewf.myinbox",
+		"type": "application",
+		"i18n": "i18n/i18n.properties",
+		"title": "{{appTitle}}",
+		"description": "{{appDescription}}",
+		"applicationVersion": { 
+			"version": "0.0.3"
+		},
+		"ach": "ach",
+		"resources": "resources.json",
+		"dataSources": {
+			"bpmworkflowruntimeodata": {
+				"uri": "/bpmworkflowruntimeodata/v1/tcm/",
+				"type": "OData",
+				"settings": {
+					"odataVersion": "2.0",
+					"localUri": "localService/metadata.xml"
+				}
+			},
+			"hanaodata": {
+				"uri": "/hana/v2/catalog/",
+				"type": "OData",
+				"settings": {
+					"odataVersion": "2.0",
+					"localUri": "localService/metadata.xml"
+				}
+			},
+			"bpmworkflowruntimerest": {
+				"uri": "/bpmworkflowruntime/v1/",
+				"type": "JSON"
+			},
+            "docservice": {
+                "uri": "/docservice/",
+                "type": "JSON"
+            },
+            "userapi": {
+                "uri": "/user-api/",
+                "type": "JSON"
+            }
+		},
+		"sourceTemplate": {
+			"id": "sap.ui.ui5-template-plugin.2masterdetail",
+			"version": "1.32.5"
+		},
+        "crossNavigation": {
+            "inbounds": {
+                "kupit-flexiblewf-myinbox-inbound": {
+                    "signature": {
+                        "parameters": {},
+                        "additionalParameters": "allowed"
+                    },
+                    "semanticObject": "kupitflexiblewfmyinbox",
+                    "action": "display",
+                    "title": "{{flpTitle}}",
+                    "subTitle": "{{flpSubtitle}}",
+                    "icon": ""
+                }
+            }
+        }
+	},
+	"sap.fiori": {
+		"_version": "1.1.0",
+		"registrationIds": [],
+		"archeType": "transactional"
+	},
+	"sap.ui": {
+		"_version": "1.3.0",
+		"technology": "UI5",
+		"icons": {
+			"icon": "sap-icon://detail-view",
+			"favIcon": "",
+			"phone": "",
+			"phone@2": "",
+			"tablet": "",
+			"tablet@2": ""
+		},
+		"deviceTypes": {
+			"desktop": true,
+			"tablet": true,
+			"phone": true
+		}
+	},
+	"sap.ui5": {
+		"_version": "1.3.0",
+		"rootView": {
+			"viewName": "kupit.flexiblewf.myinbox.view.App",
+			"type": "XML",
+			"async": false,
+			"id": "app"
+		},
+		"autoPrefixId": true,
+		"dependencies": {
+			"minUI5Version": "1.50.0",
+			"libs": {
+				"sap.ui.core": {},
+				"sap.m": {}
+			}
+		},
+		"contentDensities": {
+			"compact": true,
+			"cozy": true
+		},
+		"models": {
+			"i18n": {
+				"type": "sap.ui.model.resource.ResourceModel",
+				"uri": "i18n/i18n.properties"
+			},
+			"bpmworkflowruntimerest": {
+				"dataSource": "bpmworkflowruntimerest",
+				"type": "sap.ui.model.json.JSONModel",
+				"preload": false
+			},
+			"bpmworkflowruntimeodata": {
+				"dataSource": "bpmworkflowruntimeodata",
+				"type": "sap.ui.model.odata.v2.ODataModel",
+				"preload": true,
+				"settings": {
+					"loadMetadataAsync": false,
+					"json": true,
+					"bJSON": true,
+					"defaultBindingMode": "TwoWay",
+					"defaultCountMode": "Inline",
+					"useBatch": true,
+					"refreshAfterChange": false,
+					"disableHeadRequestForToken": true
+				}
+			},
+			"hanaodata": {
+				"dataSource": "hanaodata",
+				"type": "sap.ui.model.odata.v2.ODataModel",
+				"preload": true,
+				"settings": {
+					"loadMetadataAsync": false,
+					"json": true,
+					"bJSON": true,
+					"defaultBindingMode": "TwoWay",
+					"defaultCountMode": "Inline",
+					"useBatch": true,
+					"refreshAfterChange": false,
+					"disableHeadRequestForToken": true
+				}
+			},
+            "docservice": {
+                "dataSource": "docservice",
+				"type": "sap.ui.model.json.JSONModel",
+				"preload": false
+            },
+			"userapi": {
+				"dataSource": "userapi",
+				"type": "sap.ui.model.json.JSONModel",
+				"preload": false
+			}
+		},
+		"routing": {
+			"config": {
+				"routerClass": "sap.m.routing.Router",
+				"viewType": "XML",
+				"viewPath": "kupit.flexiblewf.myinbox.view",
+				"controlId": "idAppControl",
+				"clearTarget": false,
+				"controlAggregation": "detailPages",
+				"async": false,
+				"bypassed": {
+					"target": [
+						"ApproveWfDetail",
+						"WfListMaster"
+					]
+				}
+			},
+			"targets": {
+				"WfListMaster": {
+					"controlAggregation": "masterPages",
+					"viewName": "WfListMaster",
+					"viewId": "WfListMaster",
+					"viewLevel": 1,
+					"transition": "slide"
+				},
+				"CreateWfDetail": {
+					"controlAggregation": "detailPages",
+					"viewName": "CreateWfDetail",
+					"viewId": "CreateWfDetail",
+					"viewLevel": 1,
+					"transition": "show"
+				},
+				"ApproveWfDetail": {
+					"controlAggregation": "detailPages",
+					"viewName": "ApproveWfDetail",
+					"viewId": "ApproveWfDetail",
+					"viewLevel": 1,
+					"transition": "show"
+				}
+			},
+			"routes": [
+				{
+					"pattern": "WfListMaster",
+					"name": "WfListMaster",
+					"target": [
+						"ApproveWfDetail",
+						"WfListMaster"
+					]
+				},
+				{
+					"pattern": "WfListMaster/CreateWfDetail",
+					"name": "CreateWfDetail",
+					"target": [
+						"WfListMaster",
+						"CreateWfDetail"
+					]
+				},
+				{
+					"pattern": "WfListMaster/ApproveWfDetail/:context:",
+					"name": "ApproveWfDetail",
+					"target": [
+						"WfListMaster",
+						"ApproveWfDetail"
+					]
+				}
+			]
+		}
+	},
+    "sap.cloud": {
+        "public": true,
+        "service": "kupit-flexiblewf-app"
+    }
+}
