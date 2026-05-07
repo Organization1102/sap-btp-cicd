@@ -306,7 +306,7 @@ stage('Semantic Release (dry-run)') {
 
           withCredentials([
             usernamePassword(
-              credentialsId: 'cf-btp-trial',
+              credentialsId: 'sap-btp',
               usernameVariable: 'CF_USER',
               passwordVariable: 'CF_PASSWORD'
             )
