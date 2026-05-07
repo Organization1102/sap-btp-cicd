@@ -206,8 +206,8 @@ sh '''
 
               echo "Updating UI5 version to $VERSION"
 
-              sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" package.json
-              sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" webapp/manifest.json
+              sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" ui5/myinbox/package.json
+              sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" ui5/myinbox/webapp/manifest.json
             '''
           }
 
@@ -239,7 +239,7 @@ sh '''
 
           unstash 'updated-source'
 
-          dir("${env.REPOSITORY_NAME}") {
+          dir("${env.REPOSITORY_NAME/ui5}") {
 
             sh '''
               set -e
@@ -281,7 +281,7 @@ sh '''
             )
           ]) {
 
-            dir("${env.REPOSITORY_NAME}") {
+            dir("${env.REPOSITORY_NAME/ui5}") {
 
               sh '''
                 set -e
