@@ -166,7 +166,7 @@ stage('Semantic Release (dry-run)') {
 
       stash(
         name: 'version',
-        includes: 'workflow/version.env'
+        includes: ${env.REPOSITORY_NAME}/version.env
       )
     }
   }
@@ -192,7 +192,7 @@ stage('Semantic Release (dry-run)') {
           unstash 'source'
           unstash 'version'
 
-          dir("${env.REPOSITORY_NAME}") {
+          dir("workflow") {
 
             sh '''
               set -e
@@ -201,7 +201,7 @@ stage('Semantic Release (dry-run)') {
 
               echo "Updating mta.yaml to version $VERSION"
 
-              MTA_FILE="workflow/mta.yaml"
+              MTA_FILE="mta.yaml"
 
               ls -la workflow
 
@@ -242,7 +242,7 @@ stage('Semantic Release (dry-run)') {
 
           unstash 'updated-source'
 
-          dir("${env.REPOSITORY_NAME}") {
+          dir("workflow") {
 
             sh '''
               set -e
@@ -277,7 +277,7 @@ stage('Semantic Release (dry-run)') {
 
           stash(
             name: 'mtar',
-            includes: 'workflow/mta_archives/*.mtar',
+            includes: "mta_archives/*.mtar",
             useDefaultExcludes: false
           )
         }
@@ -312,7 +312,7 @@ stage('Semantic Release (dry-run)') {
             )
           ]) {
 
-            dir("${env.REPOSITORY_NAME}") {
+            dir("workflow") {
 
               sh '''
                 set -e
@@ -329,7 +329,7 @@ stage('Semantic Release (dry-run)') {
 
                 cf install-plugin -f multiapps || true
 
-                MTAR=$(ls workflow/mta_archives/*.mtar | head -n 1)
+                MTAR=$(ls mta_archives/*.mtar | head -n 1)
 
                 echo "================================================="
                 echo "Login to SAP BTP"
