@@ -129,6 +129,9 @@ stage('Semantic Release (dry-run)') {
               export GITHUB_TOKEN=${githubToken}
               export GH_TOKEN=${githubToken}
 
+              export GIT_BRANCH=main
+              export BRANCH_NAME=main
+
               echo "======================================="
               echo "Installing semantic-release"
               echo "======================================="
@@ -146,7 +149,7 @@ stage('Semantic Release (dry-run)') {
               echo "Running semantic-release"
               echo "======================================="
 
-              npx semantic-release --dry-run > sr.log 2>&1 || true
+              npx semantic-release --branch main --dry-run > sr.log 2>&1 || true
 
               cat sr.log
 
