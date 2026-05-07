@@ -201,6 +201,10 @@ stage('Semantic Release (dry-run)') {
 
               echo "Updating mta.yaml to version $VERSION"
 
+              pwd
+              ls -la
+              find . -name "mta.yaml"
+
               sed -i \
                 "s/^version: .*/version: $VERSION/" \
                 mta.yaml
