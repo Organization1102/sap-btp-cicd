@@ -149,7 +149,7 @@ stage('Semantic Release (dry-run)') {
 
                 cat semantic.log
 
-                VERSION=$(grep 'next release version is' sr.log | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | tail -1)
+                VERSION=$(grep 'next release version is' semantic.log | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | tail -1)
 
                 [ -z "$VERSION" ] && {
                   echo "Unable to detect semantic-release version"
