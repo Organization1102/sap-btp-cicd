@@ -77,100 +77,116 @@ pipeline {
       }
     }
 
-    /* =========================================================
-     * SEMANTIC RELEASE
-     * ========================================================= */
-    stage('Semantic Release (dry-run)') {
+/* ----------------------------------------
+ * SEMANTIC RELEASE
+ * ---------------------------------------- */
+stage('Semantic Release (dry-run)') {
+  agent {
+    kubernetes(k8sAgent(
+      cloud: 'kubernetes',
+      podTemplate: 'sap-btp',
+      serviceAccount: 'jenkins'
+    ))
+  }
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
-          serviceAccount: 'jenkins'
-        ))
-      }
+  steps {
+    container('sap-btp') {
 
-      steps {
+      unstash "source"
 
-        container('sap-btp') {
+      withAwsSecret([
+        secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN",
+        type: "keyvalue"
+      ]) {
 
-          unstash 'source'
+        dir("${env.REPOSITORY_NAME}") {
 
-          withAwsSecret([
-            secret_id: 'SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN',
-            type: 'keyvalue'
-          ]) {
+          sh '''
+            set -e
 
-            dir("${env.REPOSITORY_NAME}") {
+            echo "======================================="
+            echo "Node / NPM"
+            echo "======================================="
 
-              sh '''
-                set -e
+            node -v
+            npm -v
 
-                echo "================================================="
-                echo "Runtime check"
-                echo "================================================="
+            echo "======================================="
+            echo "Current Git remote"
+            echo "======================================="
 
-                node -v
-                npm -v
-                git --version
-                cf version || true
-                mbt --version || true
+            git remote -v
 
-                echo "================================================="
-                echo "Configure GitHub auth"
-                echo "================================================="
+            echo "======================================="
+            echo "Switching remote to HTTPS"
+            echo "======================================="
 
-                git config --global \
-                  url."https://${GITHUB_TOKEN}@github.com/".insteadOf \
-                  "https://github.com/"
+            git remote set-url origin \
+              https://${GITHUB_TOKEN}@github.com/KPICorporate/${REPOSITORY_NAME}.git
 
-                echo "================================================="
-                echo "Install semantic-release"
-                echo "================================================="
+            git remote -v
 
-                npm install --no-save \
-                  semantic-release \
-                  @semantic-release/commit-analyzer \
-                  @semantic-release/release-notes-generator \
-                  @semantic-release/exec \
-                  @semantic-release/git
+            echo "======================================="
+            echo "Export GitHub token"
+            echo "======================================="
 
-                echo "================================================="
-                echo "Run semantic-release"
-                echo "================================================="
+            export GITHUB_TOKEN=${GITHUB_TOKEN}
+            export GH_TOKEN=${GITHUB_TOKEN}
 
-                npx semantic-release --dry-run > sr.log || true
+            echo "======================================="
+            echo "Installing semantic-release"
+            echo "======================================="
 
-                cat sr.log
+            npm install \
+              semantic-release \
+              @semantic-release/commit-analyzer \
+              @semantic-release/release-notes-generator \
+              @semantic-release/exec \
+              @semantic-release/git \
+              @semantic-release/github \
+              @semantic-release/npm
 
-                VERSION=$(
-                  grep -Eo \
-                  'next release version is [0-9]+\\.[0-9]+\\.[0-9]+' \
-                  sr.log | awk '{print $5}' | tail -1
-                )
+            echo "======================================="
+            echo "Running semantic-release dry-run"
+            echo "======================================="
 
-                if [ -z "$VERSION" ]; then
-                  echo "ERROR: Unable to detect next version"
-                  exit 1
-                fi
+            npx semantic-release --dry-run > sr.log 2>&1 || true
 
-                echo "VERSION=$VERSION" > version.env
+            echo "======================================="
+            echo "semantic-release output"
+            echo "======================================="
 
-                echo "================================================="
-                echo "Next version: $VERSION"
-                echo "================================================="
-              '''
-            }
-          }
+            cat sr.log
 
-          stash(
-            name: 'version',
-            includes: "${env.REPOSITORY_NAME}/version.env",
-            useDefaultExcludes: false
-          )
+            echo "======================================="
+            echo "Extracting version"
+            echo "======================================="
+
+            VERSION=$(grep -Eo 'next release version is [0-9]+\\.[0-9]+\\.[0-9]+' sr.log \
+              | awk '{print $5}' \
+              | tail -1)
+
+            if [ -z "$VERSION" ]; then
+              echo "ERROR: Unable to detect next version"
+              exit 1
+            fi
+
+            echo "VERSION=$VERSION" > version.env
+
+            echo "======================================="
+            echo "Detected version: $VERSION"
+            echo "======================================="
+          '''
         }
       }
+
+      stash(
+        name: "version",
+        includes: "${env.REPOSITORY_NAME}/version.env"
+      )
     }
+  }
+}
 
     /* =========================================================
      * UPDATE MTA VERSION
