@@ -105,15 +105,8 @@ stage('Semantic Release (dry-run)') {
           dir("${env.REPOSITORY_NAME}") {
 
             sh '''
-              set -e
-
-              echo "======================================="
-              echo "Node / NPM"
-              echo "======================================="
-
               node -v
               npm -v
-
             '''
 
             sh """
@@ -125,47 +118,58 @@ stage('Semantic Release (dry-run)') {
               "GITHUB_TOKEN=${githubToken}",
               "GH_TOKEN=${githubToken}",
               "GIT_BRANCH=main",
-              "BRANCH_NAME=main"
+              "BRANCH_NAME=main",
+              "CI=true",
+              "NO_COLOR=1",
+              "FORCE_COLOR=0"
             ]) {
 
               sh '''
                 set -e
 
-                echo "======================================="
-                echo "Install semantic-release"
-                echo "======================================="
+                echo "Installing semantic-release..."
 
                 npm install --no-save \
                   semantic-release \
                   @semantic-release/commit-analyzer \
                   @semantic-release/release-notes-generator \
                   @semantic-release/git
+
+                echo "Running semantic-release dry-run..."
+
+                npx semantic-release \
+                  --branches main \
+                  --dry-run \
+                  --no-ci \
+                  --plugins \
+                    @semantic-release/commit-analyzer \
+                    @semantic-release/release-notes-generator \
+                    @semantic-release/git \
+                  > semantic.log 2>&1 || true
+
+                cat semantic.log
               '''
 
-              def semanticOutput = sh(
-                script: '''
-                  npx semantic-release \
-                    --branches main \
-                    --dry-run \
-                    --plugins \
-                      @semantic-release/commit-analyzer \
-                      @semantic-release/release-notes-generator \
-                      @semantic-release/git
-                ''',
-                returnStdout: true
-              ).trim()
+              def semanticOutput = readFile('semantic.log')
 
+              echo "================ RAW SEMANTIC OUTPUT ================"
               echo semanticOutput
+              echo "====================================================="
 
               def matcher = semanticOutput =~ /next release version is ([0-9]+\\.[0-9]+\\.[0-9]+)/
 
               if (!matcher.find()) {
-                error("Unable to detect semantic-release version")
+                error("""
+Unable to detect semantic-release version.
+
+Expected pattern:
+next release version is X.Y.Z
+""")
               }
 
               def version = matcher.group(1)
 
-              echo "Detected version: ${version}"
+              echo "Detected semantic version: ${version}"
 
               writeFile(
                 file: 'version.env',
