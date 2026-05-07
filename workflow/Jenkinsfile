@@ -192,7 +192,7 @@ stage('Semantic Release (dry-run)') {
           unstash 'source'
           unstash 'version'
 
-          dir("workflow") {
+          dir("${env.REPOSITORY_NAME}") {
 
             sh '''
               set -e
@@ -201,7 +201,7 @@ stage('Semantic Release (dry-run)') {
 
               echo "Updating mta.yaml to version $VERSION"
 
-              MTA_FILE="mta.yaml"
+              MTA_FILE="workflow/mta.yaml"
 
               ls -la workflow
 
