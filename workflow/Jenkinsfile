@@ -201,16 +201,16 @@ stage('Semantic Release (dry-run)') {
 
               echo "Updating mta.yaml to version $VERSION"
 
-              pwd
-              ls -la
-              find . -name "mta.yaml"
+              MTA_FILE="workflow/mta.yaml"
+
+              ls -la workflow
 
               sed -i \
                 "s/^version: .*/version: $VERSION/" \
-                mta.yaml
+                "$MTA_FILE"
 
-              echo "Updated mta.yaml:"
-              cat mta.yaml
+              echo "Updated file:"
+              cat "$MTA_FILE"
             '''
           }
 
