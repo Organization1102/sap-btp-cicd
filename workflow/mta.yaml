@@ -1,0 +1,21 @@
+_schema-version: '3.2'
+ID: kupit_flexiblewf_workflow_def
+version: 0.0.2
+modules:
+  - name: workflow-module
+    type: com.sap.application.content
+    path: workflow-module
+    requires:
+      - name: kupit_flexiblewf_workflow 
+        parameters: 
+          content-target: true 
+          service-key: 
+            config: 
+              deployUsageScenario: workflow 
+            name: kupit-flexiblewf-workflow-service-key 
+resources:
+  - name: kupit_flexiblewf_workflow
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: process-automation-service 
+      service-plan: standard
