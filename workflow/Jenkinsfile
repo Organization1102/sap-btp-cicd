@@ -319,7 +319,7 @@ stage('Semantic Release (dry-run)') {
 
         withEnv([
 						"NEXUS_TOKEN_B64=${nexusToken}"
-					])
+					]) {
 
 				dir("${env.REPOSITORY_NAME}/workflow") {
 
@@ -363,6 +363,7 @@ stage('Semantic Release (dry-run)') {
 	 }
   }
  }
+}
 
 /* =========================================================
  * DEPLOY
