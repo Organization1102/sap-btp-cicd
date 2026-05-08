@@ -478,7 +478,16 @@ stage('Deploy') {
           sh """
             set -e
 
-            VERSION=\$(cat version.env | sed 's/VERSION=//')
+            VERSION=\$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
+
+            if [ -z "\$VERSION" ]; then
+              echo "ERROR: VERSION is empty"
+              exit 1
+            fi
+
+            echo "Using VERSION: \$VERSION"
+
+            cd /tmp/${targetRepo}
 
             echo "================================================="
             echo "Git config"
