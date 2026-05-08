@@ -317,48 +317,48 @@ stage('Semantic Release (dry-run)') {
 				
 				def nexusToken = env.token
 
-				dir("${env.REPOSITORY_NAME}/workflow") {
-
-					sh '''
-						set -e
-					
-					withEnv([
+        withEnv([
 						"NEXUS_TOKEN_B64=${nexusToken}"
 					])
 
-					VERSION=$(cat ../version.env | sed 's/VERSION=//')
+				dir("${env.REPOSITORY_NAME}/workflow") {
 
-					MTAR_FILE=$(ls mta_archives/*.mtar | head -n 1)
+					sh '''
+						set -e					
 
-					MTAR_NAME=$(basename "$MTAR_FILE")
+					  VERSION=$(cat ../version.env | sed 's/VERSION=//')
 
-					echo "================================================="
-					echo "Upload MTAR to Nexus"
-					echo "================================================="
+					  MTAR_FILE=$(ls mta_archives/*.mtar | head -n 1)
 
-					echo "Artifact: $MTAR_NAME"
-					echo "Version : $VERSION"
+					  MTAR_NAME=$(basename "$MTAR_FILE")
 
-					HTTP_CODE=$(curl \
-					--insecure \
-					-H "Authorization: Basic ${NEXUS_TOKEN_B64}" \
-					-H "Content-Type: application/octet-stream" \
-					--upload-file "$MTAR_FILE" \
-					-w "%{http_code}" \
-					-o /dev/null \
-					"${NEXUS_URL}/repository/${NEXUS_REPO}/${VERSION}/${MTAR_NAME}")
+					  echo "================================================="
+					  echo "Upload MTAR to Nexus"
+					  echo "================================================="
 
-				echo "HTTP CODE: $HTTP_CODE"
+					  echo "Artifact: $MTAR_NAME"
+					  echo "Version : $VERSION"
 
-				if [ "$HTTP_CODE" != "201" ]; then
-					echo "ERROR: Upload failed"
-					exit 1
-				fi
+					  HTTP_CODE=$(curl \
+					  --insecure \
+					  -H "Authorization: Basic ${NEXUS_TOKEN_B64}" \
+					  -H "Content-Type: application/octet-stream" \
+					  --upload-file "$MTAR_FILE" \
+					  -w "%{http_code}" \
+					  -o /dev/null \
+					  "${NEXUS_URL}/repository/${NEXUS_REPO}/${VERSION}/${MTAR_NAME}")
 
-				echo "Upload completed successfully"
-			'''
+				    echo "HTTP CODE: $HTTP_CODE"
+
+				    if [ "$HTTP_CODE" != "201" ]; then
+					    echo "ERROR: Upload failed"
+					    exit 1
+				    fi
+
+				    echo "Upload completed successfully"
+			    '''
+        }  
       }  
-     }  
 	  }
 	 }
   }
