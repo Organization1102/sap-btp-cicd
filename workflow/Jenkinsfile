@@ -464,68 +464,73 @@ stage('Deploy') {
           unstash 'updated-source'
           unstash 'version'
 
-          withCredentials([
-            usernamePassword(
-              credentialsId: 'github-token',
-              usernameVariable: 'GIT_USER',
-              passwordVariable: 'GIT_TOKEN'
-            )
+          withAwsSecret([
+            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+            type: "keyvalue"
           ]) {
 
-            dir("${env.REPOSITORY_NAME}") {
+            script {
 
-              sh '''
-                set -e
+              def githubToken = env.token
 
-                VERSION=$(cat version.env | sed 's/VERSION=//')
+              withEnv([
+                "GH_TOKEN=${githubToken}"
+              ]) {
 
-                echo "================================================="
-                echo "Git config"
-                echo "================================================="
+                dir("${env.REPOSITORY_NAME}") {
 
-                git config user.email "ci@jenkins"
-                git config user.name "Jenkins CI"
+                  sh '''
+                    set -e
 
-                git remote set-url origin \
-                  https://${GIT_USER}:${GIT_TOKEN}@github.com/KPICorporate/${REPOSITORY_NAME}.git
+                    VERSION=$(cat version.env | sed 's/VERSION=//')
 
-                echo "================================================="
-                echo "Sync repository"
-                echo "================================================="
+                    echo "================================================="
+                    echo "Git config"
+                    echo "================================================="
 
-                git fetch --all --tags
+                    git config user.email "ci@jenkins"
+                    git config user.name "Jenkins CI"
 
-                git checkout main
+                    git remote set-url origin \
+                      https://x-access-token:${GH_TOKEN}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
 
-                git pull origin main
+                    echo "================================================="
+                    echo "Sync repository"
+                    echo "================================================="
 
-                echo "================================================="
-                echo "Commit release"
-                echo "================================================="
+                    git fetch --all --tags
 
-                git add workflow/mta.yaml
+                    git checkout main
 
-                git commit \
-                  -m "chore(release): ${VERSION} [skip ci]" \
-                  || true
+                    git pull origin main
 
-                echo "================================================="
-                echo "Create tag"
-                echo "================================================="
+                    echo "================================================="
+                    echo "Commit release"
+                    echo "================================================="
 
-                git tag -f "v${VERSION}"
+                    git add workflow/mta.yaml
 
-                echo "================================================="
-                echo "Push changes"
-                echo "================================================="
+                    git commit \
+                      -m "chore(release): ${VERSION} [skip ci]" \
+                      || true
 
-                git push origin main
-                git push origin --tags --force
-              '''
+                    echo "================================================="
+                    echo "Create tag"
+                    echo "================================================="
+
+                    git tag -f "v${VERSION}"
+
+                    echo "================================================="
+                    echo "Push changes"
+                    echo "================================================="
+
+                    git push origin main
+                    git push origin --tags --force
+                  '''
+                }
+              }
             }
           }
         }
       }
     }
-  }
-}
