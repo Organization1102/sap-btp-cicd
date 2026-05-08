@@ -17,6 +17,9 @@ pipeline {
     GH_ORGANIZATION = 'KPICorporate'
     REPOSITORY_NAME = 'sap-btp-cicd'
     JENKINS_ENV     = 'PROD'
+    
+    NEXUS_URL  = 'https://nexus.automation-platform.eu-west-1.aws.q8int.com'
+	  NEXUS_REPO = 'sap-btp-raw-dev-hosted'
   }
 
   stages {
@@ -378,6 +381,83 @@ pipeline {
     }
 
     /* =========================================================
+	 * PUBLISH MTAR TO NEXUS
+     * ========================================================= */
+	stage('Publish MTAR to Nexus') {
+
+		agent {
+			kubernetes(k8sAgent(
+			cloud: 'kubernetes',
+			podTemplate: 'sap-btp',
+			serviceAccount: 'jenkins'
+			))
+		}
+
+		steps {
+
+			container('sap-btp') {
+
+			unstash 'mtar'
+			unstash 'version'
+			
+			withAwsSecret([
+			  secret_id: "SM-AUT-PLAT-PROD-NEXUS-SAP-BTP-CREDENTIALS".toUpperCase(),
+			  type: "keyvalue"
+			]) {
+			
+			  script {
+				
+				def nexusToken = env.token
+
+        withEnv([
+						"NEXUS_TOKEN_B64=${nexusToken}"
+					]) {
+
+				dir("${env.REPOSITORY_NAME}/cap") {
+
+					sh '''
+						set -e					
+
+					  VERSION=$(cat ../version.env | sed 's/VERSION=//')
+
+					  MTAR_FILE=$(ls mta_archives/*.mtar | head -n 1)
+
+					  MTAR_NAME=$(basename "$MTAR_FILE")
+
+					  echo "================================================="
+					  echo "Upload MTAR to Nexus"
+					  echo "================================================="
+
+					  echo "Artifact: $MTAR_NAME"
+					  echo "Version : $VERSION"
+
+					  HTTP_CODE=$(curl \
+					  --insecure \
+					  -H "Authorization: Basic ${NEXUS_TOKEN_B64}" \
+					  -H "Content-Type: application/octet-stream" \
+					  --upload-file "$MTAR_FILE" \
+					  -w "%{http_code}" \
+					  -o /dev/null \
+					  "${NEXUS_URL}/repository/${NEXUS_REPO}/${VERSION}/${MTAR_NAME}")
+
+				    echo "HTTP CODE: $HTTP_CODE"
+
+				    if [ "$HTTP_CODE" != "201" ]; then
+					    echo "ERROR: Upload failed"
+					    exit 1
+				    fi
+
+				    echo "Upload completed successfully"
+			    '''
+        }  
+      }  
+	  }
+	 }
+  }
+ }
+}
+
+    /* =========================================================
      * DEPLOY
      * ========================================================= */
     stage('Deploy') {
@@ -397,13 +477,20 @@ pipeline {
           unstash 'updated-source'
           unstash 'mtar'
 
-          withCredentials([
-            usernamePassword(
-              credentialsId: 'sap-btp',
-              usernameVariable: 'CF_USER',
-              passwordVariable: 'CF_PASSWORD'
-            )
+          withAwsSecret([
+            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-DEPLOY-CREDENTIALS".toUpperCase(),
+            type: "keyvalue"
           ]) {
+            
+            script {
+
+              def btpUser = env.username
+              def btpPassword = env.password
+
+              withEnv([
+                "CF_USER=${btpUser}",
+                "CF_PASSWORD=${btpPassword}"
+              ]) {
 
             dir("${env.REPOSITORY_NAME}/cap") {
 
