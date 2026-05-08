@@ -309,7 +309,7 @@ stage('Semantic Release (dry-run)') {
 			unstash 'version'
 			
 			withAwsSecret([
-			  secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-DEPLOY-CREDENTIALS".toUpperCase(),
+			  secret_id: "SM-AUT-PLAT-PROD-NEXUS-SAP-BTP-CREDENTIALS".toUpperCase(),
 			  type: "keyvalue"
 			]) {
 			
