@@ -377,10 +377,9 @@ stage('Semantic Release (dry-run)') {
 			type: "keyvalue"
 		  ]) {
 
-			script {
-			
-			  def CF_USER     = env.username
-			  def CF_PASSWORD = env.password
+			withEnv([
+			  "CF_USER=${env.cf_user}",
+			  "CF_PASSWORD=${env.cf_password}"
 
             dir("${env.REPOSITORY_NAME}/workflow") {
 
@@ -423,7 +422,6 @@ stage('Semantic Release (dry-run)') {
         }
       }
     }
-  }
 
     /* =========================================================
      * COMMIT & TAG
