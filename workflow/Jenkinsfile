@@ -476,71 +476,51 @@ stage('Deploy') {
           def targetRepo = "sap-btp-wflibero2-workflow-cicd"
 
           sh """
-            set -e
+  set -e
 
-            VERSION=\$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
+  VERSION=\$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
-            if [ -z "\$VERSION" ]; then
-              echo "ERROR: VERSION is empty"
-              exit 1
-            fi
+  if [ -z "\$VERSION" ]; then
+    echo "ERROR: VERSION is empty"
+    exit 1
+  fi
 
-            echo "Using VERSION: \$VERSION"
+  echo "Using VERSION: \$VERSION"
 
-            cd /tmp/${targetRepo}
+  TARGET_REPO="sap-btp-wflibero2-workflow-cicd"
+  TARGET_DIR="/tmp/\$TARGET_REPO"
 
-            echo "================================================="
-            echo "Git config"
-            echo "================================================="
+  echo "Target dir: \$TARGET_DIR"
 
-            git config --global user.email "ci@jenkins"
-            git config --global user.name "Jenkins CI"
+  git config --global user.email "ci@jenkins"
+  git config --global user.name "Jenkins CI"
 
-            echo "================================================="
-            echo "Clone target repository"
-            echo "================================================="
+  echo "Cloning repo..."
 
-            cd /tmp
+  rm -rf "\$TARGET_DIR"
 
-            rm -rf ${targetRepo}
+  git clone https://x-access-token:${githubToken}@github.com/KPICorporate/\$TARGET_REPO.git "\$TARGET_DIR"
 
-            git clone https://x-access-token:${githubToken}@github.com/KPICorporate/${targetRepo}.git
+  if [ ! -d "\$TARGET_DIR/.git" ]; then
+    echo "ERROR: clone failed"
+    exit 1
+  fi
 
-            echo "================================================="
-            echo "Copy updated files"
-            echo "================================================="
+  cd "\$TARGET_DIR"
 
-            cp -f ${WORKSPACE}/${REPOSITORY_NAME}/workflow/mta.yaml /tmp/${targetRepo}/mta.yaml
+  echo "Copy files"
 
-            cd /tmp/${targetRepo}
+  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/workflow/mta.yaml mta.yaml
 
-            echo "================================================="
-            echo "Repository status"
-            echo "================================================="
+  git add mta.yaml
 
-            git status
+  git commit -m "chore(release): \$VERSION [skip ci]" || true
 
-            echo "================================================="
-            echo "Commit release"
-            echo "================================================="
+  git tag -f "v\$VERSION"
 
-            git add mta.yaml
-
-            git commit -m "chore(release): \$VERSION [skip ci]" || true
-
-            echo "================================================="
-            echo "Create tag"
-            echo "================================================="
-
-            git tag -f "v\$VERSION"
-
-            echo "================================================="
-            echo "Push changes"
-            echo "================================================="
-
-            git push origin main
-            git push origin --tags --force
-          """
+  git push origin main
+  git push origin --tags --force
+"""
             }
           }
         }
