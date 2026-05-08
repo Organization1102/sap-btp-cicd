@@ -378,8 +378,8 @@ stage('Semantic Release (dry-run)') {
 		  ]) {
 
 			withEnv([
-			  "CF_USER=${env.cf_user}",
-			  "CF_PASSWORD=${env.cf_password}"
+			  "CF_USER=${env.username}",
+			  "CF_PASSWORD=${env.password}"
 			]) 
 
             dir("${env.REPOSITORY_NAME}/workflow") {
