@@ -1,6 +1,6 @@
 _schema-version: '3.2'
 ID: kupit_flexiblewf_workflow_def
-version: 0.0.2
+version: 1.0.0
 modules:
   - name: workflow-module
     type: com.sap.application.content
