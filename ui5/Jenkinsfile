@@ -481,7 +481,6 @@ sh '''
 
         container('sap-btp') {
 
-          unstash 'updated-source'
           unstash 'mtar'
 
           withAwsSecret([
@@ -504,9 +503,34 @@ sh '''
               sh '''
                 set -e
 
+                echo "================================================="
+                echo "CF CLI version"
+                echo "================================================="
+
                 cf version
 
+                echo "================================================="
+                echo "Install MultiApps plugin"
+                echo "================================================="
+
                 cf install-plugin -f multiapps || true
+
+                echo "================================================="
+                echo "Locate MTAR"
+                echo "================================================="
+
+                MTAR=$(ls mta_archives/*.mtar | head -n 1)
+
+                if [ -z "$MTAR" ]; then
+                  echo "MTAR not found!"
+                  exit 1
+                fi
+
+                echo "MTAR: $MTAR"
+
+                echo "================================================="
+                echo "Login to SAP BTP"
+                echo "================================================="
 
                 cf login \
                   -a "$CF_API" \
@@ -515,12 +539,11 @@ sh '''
                   -o "$CF_ORG" \
                   -s "$CF_SPACE"
 
-                if [ -d "dist" ]; then
-                  cf push ui5-app -p dist
-                else
-                  echo "No dist folder found"
-                  exit 1
-                fi
+                echo "================================================="
+                echo "Deploy MTAR"
+                echo "================================================="
+
+                cf deploy "$MTAR" -f
               '''
             }
           }
