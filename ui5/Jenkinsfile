@@ -553,56 +553,87 @@ sh '''
   }
 }
     /* =========================================================
-     * COMMIT & TAG (GH POD)
+     * COMMIT & TAG
      * ========================================================= */
     stage('Commit & Tag') {
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
+  agent {
+    kubernetes(k8sAgent(
+      cloud: 'kubernetes',
+      podTemplate: 'gh',
+      serviceAccount: 'jenkins'
+    ))
+  }
 
-      steps {
+  steps {
 
-        container('gh') {
+    container('gh') {
 
-          unstash 'updated-source'
-          unstash 'version'
+      unstash 'updated-source'
+      unstash 'version'
 
-          withCredentials([
-            usernamePassword(
-              credentialsId: 'github-token',
-              usernameVariable: 'GIT_USER',
-              passwordVariable: 'GIT_TOKEN'
-            )
-          ]) {
+      withAwsSecret([
+        secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+        type: "keyvalue"
+      ]) {
 
-            dir("${env.REPOSITORY_NAME}") {
+        script {
 
-              sh '''
-                set -e
+          def githubToken = env.token
+          def targetRepo = "sap-btp-wflibero2-workflow-cicd"
 
-                VERSION=$(cat version.env | sed 's/VERSION=//')
-                [ -z "$VERSION" ] && exit 0
+          sh """
+  set -e
 
-                git config user.email "ci@jenkins"
-                git config user.name "Jenkins CI"
+  VERSION=\$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
-                git remote set-url origin \
-                  https://${GIT_USER}:${GIT_TOKEN}@github.com/KPICorporate/${REPOSITORY_NAME}.git
+  if [ -z "\$VERSION" ]; then
+    echo "ERROR: VERSION is empty"
+    exit 1
+  fi
 
-                git add ui5/mta.yaml ui5/myinbox/package.json ui5/myinbox/webapp/manifest.json
+  echo "Using VERSION: \$VERSION"
 
-                git commit -m "chore(release): ${VERSION} [skip ci]" || true
+  TARGET_REPO="sap-btp-wflibero2-ui5-cicd"
+  TARGET_DIR="/tmp/\$TARGET_REPO"
 
-                git tag -f "v${VERSION}"
+  echo "Target dir: \$TARGET_DIR"
 
-                git push origin main
-                git push origin --tags
-              '''
+  git config --global user.email "ci@jenkins"
+  git config --global user.name "Jenkins CI"
+
+  echo "Cloning repo..."
+
+  rm -rf "\$TARGET_DIR"
+
+  git clone https://x-access-token:${githubToken}@github.com/KPICorporate/\$TARGET_REPO.git "\$TARGET_DIR"
+
+  if [ ! -d "\$TARGET_DIR/.git" ]; then
+    echo "ERROR: clone failed"
+    exit 1
+  fi
+
+  cd "\$TARGET_DIR"
+
+  echo "Copy files"
+
+  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/mta.yaml mta.yaml
+  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/myinbox/package.json ui5/myinbox/package.json
+  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/myinbox/webapp/manifest.json ui5/myinbox/webapp/manifest.json
+
+  git add \
+  mta.yaml \
+  ui5/myinbox/package.json \
+  ui5/myinbox/webapp/manifest.json
+
+
+  git commit -m "chore(release): \$VERSION [skip ci]" || true
+
+  git tag -f "v\$VERSION"
+
+  git push origin main
+  git push origin --tags --force
+"""
             }
           }
         }
