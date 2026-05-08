@@ -450,102 +450,88 @@ stage('Deploy') {
      * ========================================================= */
     stage('Commit & Tag') {
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
+  agent {
+    kubernetes(k8sAgent(
+      cloud: 'kubernetes',
+      podTemplate: 'gh',
+      serviceAccount: 'jenkins'
+    ))
+  }
 
-      steps {
+  steps {
 
-        container('gh') {
+    container('gh') {
 
-          unstash 'updated-source'
-          unstash 'version'
+      unstash 'updated-source'
+      unstash 'version'
 
-          withAwsSecret([
-            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
-            type: "keyvalue"
-          ]) {
+      withAwsSecret([
+        secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+        type: "keyvalue"
+      ]) {
 
-            script {
+        script {
 
-              def githubToken = env.token
+          def githubToken = env.token
+          def targetRepo = "sap-btp-wflibero2-workflow-cicd"
 
-              withEnv([
-                "GH_TOKEN=${githubToken}"
-              ]) {
+          sh """
+            set -e
 
-                dir("${env.REPOSITORY_NAME}") {
+            VERSION=\$(cat version.env | sed 's/VERSION=//')
 
-                  sh '''
-                    set -e
+            echo "================================================="
+            echo "Git config"
+            echo "================================================="
 
-                    VERSION=$(cat version.env | sed 's/VERSION=//')
+            git config --global user.email "ci@jenkins"
+            git config --global user.name "Jenkins CI"
 
-                                    echo "================================================="
-                echo "Git config"
-                echo "================================================="
+            echo "================================================="
+            echo "Clone target repository"
+            echo "================================================="
 
-                git config --global user.email "ci@jenkins"
-                git config --global user.name "Jenkins CI"
+            cd /tmp
 
-                echo "================================================="
-                echo "Clone target repository"
-                echo "================================================="
+            rm -rf ${targetRepo}
 
-                cd ..
+            git clone https://x-access-token:${githubToken}@github.com/KPICorporate/${targetRepo}.git
 
-                rm -rf ${TARGET_REPOSITORY}
+            echo "================================================="
+            echo "Copy updated files"
+            echo "================================================="
 
-                git clone \
-                  https://x-access-token:${GH_TOKEN}@github.com/KPICorporate/${REPOSITORY_TARGET}.git
+            cp -f ${WORKSPACE}/${REPOSITORY_NAME}/workflow/mta.yaml /tmp/${targetRepo}/mta.yaml
 
-                echo "================================================="
-                echo "Copy updated files"
-                echo "================================================="
+            cd /tmp/${targetRepo}
 
-                cp -f \
-                  ${REPOSITORY_NAME}/workflow/mta.yaml \
-                  ${TARGET_REPOSITORY}/mta.yaml
+            echo "================================================="
+            echo "Repository status"
+            echo "================================================="
 
-                cd ${TARGET_REPOSITORY}
+            git status
 
-                echo "================================================="
-                echo "Repository status"
-                echo "================================================="
+            echo "================================================="
+            echo "Commit release"
+            echo "================================================="
 
-                git status
+            git add mta.yaml
 
-                echo "================================================="
-                echo "Commit release"
-                echo "================================================="
+            git commit -m "chore(release): \$VERSION [skip ci]" || true
 
-                git add mta.yaml
+            echo "================================================="
+            echo "Create tag"
+            echo "================================================="
 
-                git commit \
-                  -m "chore(release): ${VERSION} [skip ci]" \
-                  || true
+            git tag -f "v\$VERSION"
 
-                echo "================================================="
-                echo "Create tag"
-                echo "================================================="
+            echo "================================================="
+            echo "Push changes"
+            echo "================================================="
 
-                git tag -f "v${VERSION}"
-
-                echo "================================================="
-                echo "Push changes"
-                echo "================================================="
-
-                git push origin main
-                git push origin --tags --force
-
-                echo "================================================="
-                echo "Completed"
-                echo "================================================="
-              '''
+            git push origin main
+            git push origin --tags --force
+          """
             }
           }
         }
@@ -553,5 +539,3 @@ stage('Deploy') {
     }
    }
   }
- }
-}
