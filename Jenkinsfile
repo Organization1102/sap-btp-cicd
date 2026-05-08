@@ -224,158 +224,36 @@ sh '''
     /* =========================================================
      * CLEAN WORKSPACE
      * ========================================================= */
-    stage('Clean Workspace') {
+    stage('Build UI5') {
 
-  agent {
-    kubernetes(k8sAgent(
-      cloud: 'kubernetes',
-      podTemplate: 'sap-btp',
-      serviceAccount: 'jenkins'
-    ))
-  }
-
-  steps {
-
-    container('sap-btp') {
-
-      unstash 'updated-source'
-
-      dir("${env.REPOSITORY_NAME}/ui5") {
-
-        sh '''
-          set -e
-
-          echo "================================================="
-          echo "Clean workspace"
-          echo "================================================="
-
-          rm -rf \
-            gen \
-            resources \
-            dist \
-            node_modules \
-            mta_archives \
-            *.mtar
-        '''
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'sap-btp',
+          serviceAccount: 'jenkins'
+        ))
       }
 
-      stash(
-        name: 'clean-source',
-        includes: '**',
-        useDefaultExcludes: false
-      )
-    }
-  }
-}
+      steps {
 
-stage('Build UI5') {
+        container('sap-btp') {
 
-  agent {
-    kubernetes(k8sAgent(
-      cloud: 'kubernetes',
-      podTemplate: 'sap-btp',
-      serviceAccount: 'jenkins'
-    ))
-  }
+          unstash 'updated-source'
 
-  steps {
+          dir("${env.REPOSITORY_NAME}/ui5") {
 
-    container('sap-btp') {
+            sh '''
+              set -e
 
-      unstash 'clean-source'
+              npm ci
+              npm run build:cf
 
-      dir("${env.REPOSITORY_NAME}/ui5/myinbox") {
-
-        sh '''
-          set -e
-
-          echo "================================================="
-          echo "Node versions"
-          echo "================================================="
-
-          node -v
-          npm -v
-
-          echo "================================================="
-          echo "Install dependencies"
-          echo "================================================="
-
-          npm install
-
-          echo "================================================="
-          echo "Build UI5"
-          echo "================================================="
-
-          npm run build:cf
-        '''
+              ls -lah dist || true
+            '''
+          }
+        }
       }
-
-      stash(
-        name: 'ui5-built',
-        includes: '**',
-        useDefaultExcludes: false
-      )
     }
-  }
-}
-
-stage('Build MTA') {
-
-  agent {
-    kubernetes(k8sAgent(
-      cloud: 'kubernetes',
-      podTemplate: 'sap-btp',
-      serviceAccount: 'jenkins'
-    ))
-  }
-
-  steps {
-
-    container('sap-btp') {
-
-      unstash 'ui5-built'
-
-      dir("${env.REPOSITORY_NAME}/ui5") {
-
-        sh '''
-          set -e
-
-          echo "================================================="
-          echo "Tool versions"
-          echo "================================================="
-
-          node -v
-          npm -v
-          mbt --version
-
-          echo "================================================="
-          echo "Clean previous MTA build"
-          echo "================================================="
-
-          rm -rf gen mta_archives resources
-
-          echo "================================================="
-          echo "Build MTAR"
-          echo "================================================="
-
-          mbt build -p cf -t mta_archives
-
-          echo "================================================="
-          echo "Generated MTAR"
-          echo "================================================="
-
-          ls -lah mta_archives
-        '''
-      }
-
-      stash(
-        name: 'mtar',
-        includes: "${env.REPOSITORY_NAME}/ui5/mta_archives/*.mtar",
-        useDefaultExcludes: false
-      )
-    }
-  }
-}
 
     /* =========================================================
      * DEPLOY CF (SAP-BTP POD)
