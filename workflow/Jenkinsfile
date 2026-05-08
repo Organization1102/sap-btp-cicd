@@ -372,13 +372,15 @@ stage('Semantic Release (dry-run)') {
           unstash 'updated-source'
           unstash 'mtar'
 
-          withCredentials([
-            usernamePassword(
-              credentialsId: 'sap-btp',
-              usernameVariable: 'CF_USER',
-              passwordVariable: 'CF_PASSWORD'
-            )
-          ]) {
+          withAwsSecret([
+			secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-DEPLOY-CREDENTIALS",
+			type: "keyvalue"
+		  ]) {
+
+			script {
+			
+			  def CF_USER     = env.username
+			  def CF_PASSWORD = env.password
 
             dir("${env.REPOSITORY_NAME}/workflow") {
 
@@ -481,7 +483,7 @@ stage('Semantic Release (dry-run)') {
                 echo "Commit release"
                 echo "================================================="
 
-                git add mta.yaml
+                git add workflow/mta.yaml
 
                 git commit \
                   -m "chore(release): ${VERSION} [skip ci]" \
