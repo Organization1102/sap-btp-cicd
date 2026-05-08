@@ -501,7 +501,7 @@ stage('Deploy') {
                 rm -rf ${TARGET_REPOSITORY}
 
                 git clone \
-                  https://x-access-token:${GH_TOKEN}@github.com/KPICorporate/${TARGET_REPOSITORY}.git
+                  https://x-access-token:${GH_TOKEN}@github.com/KPICorporate/${REPOSITORY_TARGET}.git
 
                 echo "================================================="
                 echo "Copy updated files"
