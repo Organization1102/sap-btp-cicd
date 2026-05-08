@@ -17,11 +17,8 @@ pipeline {
     REPOSITORY_NAME = 'sap-btp-cicd'
     JENKINS_ENV     = 'PROD'
 	
-	#NEXUS_USER     = 'NNNiRUX0'
-	#NEXUS_PASSWORD = 'wAX04vrXvw4oQ6oT7yYEaMK-Zb3dq9bp1yhB_uLWwzzn'
-	
-	NEXUS_URL  = 'https://nexus.automation-platform.eu-west-1.aws.q8int.com'
-	NEXUS_REPO = 'sap-btp-raw-dev-hosted'
+	  NEXUS_URL  = 'https://nexus.automation-platform.eu-west-1.aws.q8int.com'
+	  NEXUS_REPO = 'sap-btp-raw-dev-hosted'
   }
 
   stages {
