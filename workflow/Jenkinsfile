@@ -355,45 +355,45 @@ stage('Semantic Release (dry-run)') {
     /* =========================================================
      * DEPLOY
      * ========================================================= */
-    stage('Deploy') {
+    /* =========================================================
+ * DEPLOY
+ * ========================================================= */
+stage('Deploy') {
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
-          serviceAccount: 'jenkins'
-        ))
-      }
+  agent {
+    kubernetes(k8sAgent(
+      cloud: 'kubernetes',
+      podTemplate: 'sap-btp',
+      serviceAccount: 'jenkins'
+    ))
+  }
 
-      steps {
+  steps {
 
-        container('sap-btp') {
+    container('sap-btp') {
 
-          unstash 'updated-source'
-          unstash 'mtar'
+      unstash 'updated-source'
+      unstash 'mtar'
 
-          withAwsSecret([
-			secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-DEPLOY-CREDENTIALS".toUpperCase(),
-			type: "keyvalue"
-		  ]) {
+      withAwsSecret([
+        secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-DEPLOY-CREDENTIALS".toUpperCase(),
+        type: "keyvalue"
+      ]) {
 
-			script {
+        script {
 
-			  def btpUser = env.username
-			  def btpPassword = env.password
-	
+          def btpUser = env.username
+          def btpPassword = env.password
 
-			  dir("${env.REPOSITORY_NAME}/workflow") {
+          withEnv([
+            "CF_USER=${btpUser}",
+            "CF_PASSWORD=${btpPassword}"
+          ]) {
 
-				sh '''
-				  set -e
-				
-				withEnv([
-				  "CF_USER=${btpUser}",
-				  "CF_PASSWORD=${btpPassword}"
-	
-				]) {
-					
+            dir("${env.REPOSITORY_NAME}/workflow") {
+
+              sh '''
+                set -e
 
                 echo "================================================="
                 echo "CF CLI version"
@@ -432,7 +432,7 @@ stage('Semantic Release (dry-run)') {
       }
     }
   }
- }
+}
 
     /* =========================================================
      * COMMIT & TAG
@@ -517,4 +517,5 @@ stage('Semantic Release (dry-run)') {
         }
       }
     }
-   }
+  }
+}
