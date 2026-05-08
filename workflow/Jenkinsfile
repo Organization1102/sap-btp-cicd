@@ -373,19 +373,27 @@ stage('Semantic Release (dry-run)') {
           unstash 'mtar'
 
           withAwsSecret([
-			secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-DEPLOY-CREDENTIALS",
+			secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-DEPLOY-CREDENTIALS".toUpperCase(),
 			type: "keyvalue"
 		  ]) {
 
-			withEnv([
-			  "CF_USER=${env.username}",
-			  "CF_PASSWORD=${env.password}"
-			]) 
+			script {
 
-            dir("${env.REPOSITORY_NAME}/workflow") {
+			  def btpUser = env.username
+			  def btpPassword = env.password
+	
 
-              sh '''
-                set -e
+			  dir("${env.REPOSITORY_NAME}/workflow") {
+
+				sh '''
+				  set -e
+				
+				withEnv([
+				  "CF_USER=${btpUser}",
+				  "CF_PASSWORD=${btpPassword}"
+	
+				]) {
+					
 
                 echo "================================================="
                 echo "CF CLI version"
@@ -423,6 +431,8 @@ stage('Semantic Release (dry-run)') {
         }
       }
     }
+  }
+ }
 
     /* =========================================================
      * COMMIT & TAG
