@@ -580,7 +580,7 @@ sh '''
         script {
 
           def githubToken = env.token
-          def targetRepo = "sap-btp-wflibero2-workflow-cicd"
+          def targetRepo = "sap-btp-wflibero2-ui5-cicd"
 
           sh """
   set -e
