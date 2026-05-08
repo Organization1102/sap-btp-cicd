@@ -485,55 +485,73 @@ stage('Deploy') {
 
                     VERSION=$(cat version.env | sed 's/VERSION=//')
 
-                    echo "================================================="
-                    echo "Git config"
-                    echo "================================================="
+                                    echo "================================================="
+                echo "Git config"
+                echo "================================================="
 
-                    git config user.email "ci@jenkins"
-                    git config user.name "Jenkins CI"
+                git config --global user.email "ci@jenkins"
+                git config --global user.name "Jenkins CI"
 
-                    git remote set-url origin \
-                      https://x-access-token:${GH_TOKEN}@github.com/${GH_ORGANIZATION}/${REPOSITORY_TARGET}.git
+                echo "================================================="
+                echo "Clone target repository"
+                echo "================================================="
 
-                    echo "================================================="
-                    echo "Sync repository"
-                    echo "================================================="
+                cd ..
 
-                    git fetch --all --tags
+                rm -rf ${TARGET_REPOSITORY}
 
-                    git checkout main
+                git clone \
+                  https://x-access-token:${GH_TOKEN}@github.com/KPICorporate/${TARGET_REPOSITORY}.git
 
-                    git pull origin main
+                echo "================================================="
+                echo "Copy updated files"
+                echo "================================================="
 
-                    echo "================================================="
-                    echo "Commit release"
-                    echo "================================================="
+                cp -f \
+                  ${REPOSITORY_NAME}/workflow/mta.yaml \
+                  ${TARGET_REPOSITORY}/mta.yaml
 
-                    git add workflow/mta.yaml
+                cd ${TARGET_REPOSITORY}
 
-                    git commit \
-                      -m "chore(release): ${VERSION} [skip ci]" \
-                      || true
+                echo "================================================="
+                echo "Repository status"
+                echo "================================================="
 
-                    echo "================================================="
-                    echo "Create tag"
-                    echo "================================================="
+                git status
 
-                    git tag -f "v${VERSION}"
+                echo "================================================="
+                echo "Commit release"
+                echo "================================================="
 
-                    echo "================================================="
-                    echo "Push changes"
-                    echo "================================================="
+                git add mta.yaml
 
-                    git push origin main
-                    git push origin --tags --force
-                  '''
-                }
-              }
+                git commit \
+                  -m "chore(release): ${VERSION} [skip ci]" \
+                  || true
+
+                echo "================================================="
+                echo "Create tag"
+                echo "================================================="
+
+                git tag -f "v${VERSION}"
+
+                echo "================================================="
+                echo "Push changes"
+                echo "================================================="
+
+                git push origin main
+                git push origin --tags --force
+
+                echo "================================================="
+                echo "Completed"
+                echo "================================================="
+              '''
             }
           }
         }
       }
     }
+   }
   }
+ }
 }
