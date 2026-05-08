@@ -618,13 +618,13 @@ sh '''
   echo "Copy files"
 
   cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/mta.yaml mta.yaml
-  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/myinbox/package.json ui5/myinbox/package.json
-  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/myinbox/webapp/manifest.json ui5/myinbox/webapp/manifest.json
+  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/myinbox/package.json myinbox/package.json
+  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/myinbox/webapp/manifest.json myinbox/webapp/manifest.json
 
   git add \
   mta.yaml \
-  ui5/myinbox/package.json \
-  ui5/myinbox/webapp/manifest.json
+  myinbox/package.json \
+  myinbox/webapp/manifest.json
 
 
   git commit -m "chore(release): \$VERSION [skip ci]" || true
