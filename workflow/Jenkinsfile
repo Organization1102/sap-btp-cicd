@@ -16,6 +16,12 @@ pipeline {
     GH_ORGANIZATION = 'KPICorporate'
     REPOSITORY_NAME = 'sap-btp-cicd'
     JENKINS_ENV     = 'PROD'
+	
+	NEXUS_USER     = 'NNNiRUX0'
+	NEXUS_PASSWORD = 'wAX04vrXvw4oQ6oT7yYEaMK-Zb3dq9bp1yhB_uLWwzzn'
+	
+	NEXUS_URL  = 'https://nexus.automation-platform.eu-west-1.aws.q8int.com'
+	NEXUS_REPO = 'sap-btp-raw-dev-hosted'
   }
 
   stages {
@@ -283,6 +289,68 @@ stage('Semantic Release (dry-run)') {
         }
       }
     }
+	
+	
+	/* =========================================================
+	 * PUBLISH MTAR TO NEXUS
+     * ========================================================= */
+	stage('Publish MTAR to Nexus') {
+
+		agent {
+			kubernetes(k8sAgent(
+			cloud: 'kubernetes',
+			podTemplate: 'sap-btp',
+			serviceAccount: 'jenkins'
+			))
+		}
+
+		steps {
+
+			container('sap-btp') {
+
+			unstash 'mtar'
+			unstash 'version'
+
+			dir("${env.REPOSITORY_NAME}/workflow") {
+
+				sh '''
+					set -e
+
+					VERSION=$(cat ../version.env | sed 's/VERSION=//')
+
+					MTAR_FILE=$(ls mta_archives/*.mtar | head -n 1)
+
+					MTAR_NAME=$(basename "$MTAR_FILE")
+
+					echo "================================================="
+					echo "Upload MTAR to Nexus"
+					echo "================================================="
+
+					echo "Artifact: $MTAR_NAME"
+					echo "Version : $VERSION"
+
+					HTTP_CODE=$(curl \
+					-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+					--insecure \
+					-H "Content-Type: application/octet-stream" \
+					--upload-file "$MTAR_FILE" \
+					-w "%{http_code}" \
+					-o /dev/null \
+					"${NEXUS_URL}/repository/${NEXUS_REPO}/${VERSION}/${MTAR_NAME}")
+
+				echo "HTTP CODE: $HTTP_CODE"
+
+				if [ "$HTTP_CODE" != "201" ]; then
+					echo "ERROR: Upload failed"
+					exit 1
+				fi
+
+				echo "Upload completed successfully"
+				'''
+		}
+	 }
+   }
+ }
 
     /* =========================================================
      * DEPLOY
