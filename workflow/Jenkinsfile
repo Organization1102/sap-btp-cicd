@@ -17,8 +17,8 @@ pipeline {
     REPOSITORY_NAME = 'sap-btp-cicd'
     JENKINS_ENV     = 'PROD'
 	
-	NEXUS_USER     = 'NNNiRUX0'
-	NEXUS_PASSWORD = 'wAX04vrXvw4oQ6oT7yYEaMK-Zb3dq9bp1yhB_uLWwzzn'
+	#NEXUS_USER     = 'NNNiRUX0'
+	#NEXUS_PASSWORD = 'wAX04vrXvw4oQ6oT7yYEaMK-Zb3dq9bp1yhB_uLWwzzn'
 	
 	NEXUS_URL  = 'https://nexus.automation-platform.eu-west-1.aws.q8int.com'
 	NEXUS_REPO = 'sap-btp-raw-dev-hosted'
@@ -310,11 +310,25 @@ stage('Semantic Release (dry-run)') {
 
 			unstash 'mtar'
 			unstash 'version'
+			
+			withAwsSecret([
+			  secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-DEPLOY-CREDENTIALS".toUpperCase(),
+			  type: "keyvalue"
+			]) {
+			
+			  script {
+				
+				def nexusToken = env.token
 
-			dir("${env.REPOSITORY_NAME}/workflow") {
+				dir("${env.REPOSITORY_NAME}/workflow") {
 
-				sh '''
-					set -e
+					sh '''
+						set -e
+					
+					withEnv([
+						"NEXUS_TOKEN_B64=${nexusToken}"
+
+					]) {
 
 					VERSION=$(cat ../version.env | sed 's/VERSION=//')
 
@@ -330,8 +344,8 @@ stage('Semantic Release (dry-run)') {
 					echo "Version : $VERSION"
 
 					HTTP_CODE=$(curl \
-					-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 					--insecure \
+					-H "Authorization: Basic ${NEXUS_TOKEN_B64}" \
 					-H "Content-Type: application/octet-stream" \
 					--upload-file "$MTAR_FILE" \
 					-w "%{http_code}" \
@@ -347,10 +361,13 @@ stage('Semantic Release (dry-run)') {
 
 				echo "Upload completed successfully"
 				'''
-		}
+	   }
 	 }
+    }
    }
+  }
  }
+}
 
     /* =========================================================
      * DEPLOY
