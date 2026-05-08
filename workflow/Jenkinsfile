@@ -15,6 +15,7 @@ pipeline {
 
     GH_ORGANIZATION = 'KPICorporate'
     REPOSITORY_NAME = 'sap-btp-cicd'
+    REPOSITORY_TARGET = 'sap-btp-wflibero2-workflow-cicd'
     JENKINS_ENV     = 'PROD'
 	
 	  NEXUS_URL  = 'https://nexus.automation-platform.eu-west-1.aws.q8int.com'
@@ -492,7 +493,7 @@ stage('Deploy') {
                     git config user.name "Jenkins CI"
 
                     git remote set-url origin \
-                      https://x-access-token:${GH_TOKEN}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
+                      https://x-access-token:${GH_TOKEN}@github.com/${GH_ORGANIZATION}/${REPOSITORY_TARGET}.git
 
                     echo "================================================="
                     echo "Sync repository"
