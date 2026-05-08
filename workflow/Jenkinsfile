@@ -319,12 +319,11 @@ stage('Semantic Release (dry-run)') {
 
 				dir("${env.REPOSITORY_NAME}/workflow") {
 
-					sh """
+					sh '''
 						set -e
 					
 					withEnv([
 						"NEXUS_TOKEN_B64=${nexusToken}"
-
 					])
 
 					VERSION=$(cat ../version.env | sed 's/VERSION=//')
@@ -357,7 +356,7 @@ stage('Semantic Release (dry-run)') {
 				fi
 
 				echo "Upload completed successfully"
-				"""
+			'''
       }  
      }  
 	  }
