@@ -1,0 +1,493 @@
+pipeline {
+
+  agent none
+
+  options {
+    ansiColor('xterm')
+    disableConcurrentBuilds()
+    skipDefaultCheckout(true)
+  }
+
+  environment {
+    CF_API   = 'https://api.cf.eu10-004.hana.ondemand.com'
+    CF_ORG   = 'Kuwait Petroleum Italia S.p.A.'
+    CF_SPACE = 'FlexibleV1'
+
+    GH_ORGANIZATION = 'KPICorporate'
+    REPOSITORY_NAME = 'sap-btp-cicd'
+    JENKINS_ENV     = 'PROD'
+  }
+
+  /* =========================================================
+   * CHECKOUT (GH POD)
+   * ========================================================= */
+  stages {
+
+    stage('Checkout') {
+
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'gh',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      steps {
+
+        container('gh') {
+
+          script {
+
+            def repoUrl = "git@github.com:${env.GH_ORGANIZATION}/${env.REPOSITORY_NAME}.git"
+
+            def dkName = (
+              "AUT-PLAT-${env.JENKINS_ENV}-DK-${env.REPOSITORY_NAME}"
+            ).toUpperCase()
+
+            cloneWithDK(
+              [
+                repo_url: repoUrl,
+                dk       : dkName,
+                branch   : 'main'
+              ]
+            ) {
+
+              dir("${env.REPOSITORY_NAME}") {
+
+                env.COMMIT_HASH_APP = sh(
+                  script: "git log -n 1 --format='%h'",
+                  returnStdout: true
+                ).trim()
+
+                sh '''
+                  echo "UI5 repository checked out"
+                  git status
+                '''
+              }
+            }
+
+            stash(
+              name: 'source',
+              includes: '**',
+              useDefaultExcludes: false
+            )
+          }
+        }
+      }
+    }
+
+    /* =========================================================
+     * SEMANTIC RELEASE (SAP-BTP POD)
+     * ========================================================= */
+    stage('Semantic Release (dry-run)') {
+
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'sap-btp',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      steps {
+
+        container('sap-btp') {
+
+          unstash 'source'
+
+          withAwsSecret([
+            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+            type: "keyvalue"
+          ]) {
+
+            script {
+
+              def githubToken = env.token
+
+              dir("${env.REPOSITORY_NAME}") {
+
+
+sh '''
+              node -v
+              npm -v
+            '''
+
+            sh """
+              git remote set-url origin \
+                https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
+            """
+
+            withEnv([
+              "GITHUB_TOKEN=${githubToken}",
+              "GH_TOKEN=${githubToken}",
+              "GIT_BRANCH=main",
+              "BRANCH_NAME=main",
+              "CI=true",
+              "NO_COLOR=1",
+              "FORCE_COLOR=0"
+            ]) {
+
+              sh '''
+                set -e
+
+                echo "Installing semantic-release..."
+
+                npm install --no-save \
+                  semantic-release \
+                  @semantic-release/commit-analyzer \
+                  @semantic-release/release-notes-generator \
+                  @semantic-release/git
+
+                echo "Running semantic-release dry-run..."
+
+                npx semantic-release \
+                  --branches main \
+                  --dry-run \
+                  --no-ci \
+                  --plugins \
+                    @semantic-release/commit-analyzer \
+                    @semantic-release/release-notes-generator \
+                    @semantic-release/git \
+                  > semantic.log 2>&1 || true
+
+                cat semantic.log
+
+                VERSION=$(grep 'next release version is' semantic.log | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | tail -1)
+
+                [ -z "$VERSION" ] && {
+                  echo "Unable to detect semantic-release version"
+                  exit 1
+                }
+
+                echo "VERSION=$VERSION" > version.env
+                echo "Next version: $VERSION"
+              '''
+            }
+          }
+        }
+      }
+
+      stash(
+        name: 'version',
+        includes: "${env.REPOSITORY_NAME}/version.env"
+      )
+    }
+  }
+}
+
+    /* =========================================================
+     * UPDATE VERSION FILES (SAP-BTP POD)
+     * ========================================================= */
+    stage('Update UI5 Version') {
+
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'sap-btp',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      steps {
+
+        container('sap-btp') {
+
+          unstash 'source'
+          unstash 'version'
+
+          dir("${env.REPOSITORY_NAME}") {
+
+            sh '''
+              set -e
+
+              VERSION=$(cat version.env | sed 's/VERSION=//')
+              [ -z "$VERSION" ] && exit 0
+
+              echo "Updating UI5 version to $VERSION"
+
+              sed -i "s/^version: .*/version: $VERSION/" ui5/mta.yaml
+              sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" ui5/myinbox/package.json
+              sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" ui5/myinbox/webapp/manifest.json
+            '''
+          }
+
+          stash(
+            name: 'updated-source',
+            includes: '**',
+            useDefaultExcludes: false
+          )
+        }
+      }
+    }
+
+    /* =========================================================
+     * CLEAN WORKSPACE
+     * ========================================================= */
+    stage('Clean Workspace') {
+
+  agent {
+    kubernetes(k8sAgent(
+      cloud: 'kubernetes',
+      podTemplate: 'sap-btp',
+      serviceAccount: 'jenkins'
+    ))
+  }
+
+  steps {
+
+    container('sap-btp') {
+
+      unstash 'updated-source'
+
+      dir("${env.REPOSITORY_NAME}/ui5") {
+
+        sh '''
+          set -e
+
+          echo "================================================="
+          echo "Clean workspace"
+          echo "================================================="
+
+          rm -rf \
+            gen \
+            resources \
+            dist \
+            node_modules \
+            mta_archives \
+            *.mtar
+        '''
+      }
+
+      stash(
+        name: 'clean-source',
+        includes: '**',
+        useDefaultExcludes: false
+      )
+    }
+  }
+}
+
+stage('Build UI5') {
+
+  agent {
+    kubernetes(k8sAgent(
+      cloud: 'kubernetes',
+      podTemplate: 'sap-btp',
+      serviceAccount: 'jenkins'
+    ))
+  }
+
+  steps {
+
+    container('sap-btp') {
+
+      unstash 'clean-source'
+
+      dir("${env.REPOSITORY_NAME}/ui5/myinbox") {
+
+        sh '''
+          set -e
+
+          echo "================================================="
+          echo "Node versions"
+          echo "================================================="
+
+          node -v
+          npm -v
+
+          echo "================================================="
+          echo "Install dependencies"
+          echo "================================================="
+
+          npm install
+
+          echo "================================================="
+          echo "Build UI5"
+          echo "================================================="
+
+          npm run build:cf
+        '''
+      }
+
+      stash(
+        name: 'ui5-built',
+        includes: '**',
+        useDefaultExcludes: false
+      )
+    }
+  }
+}
+
+stage('Build MTA') {
+
+  agent {
+    kubernetes(k8sAgent(
+      cloud: 'kubernetes',
+      podTemplate: 'sap-btp',
+      serviceAccount: 'jenkins'
+    ))
+  }
+
+  steps {
+
+    container('sap-btp') {
+
+      unstash 'ui5-built'
+
+      dir("${env.REPOSITORY_NAME}/ui5") {
+
+        sh '''
+          set -e
+
+          echo "================================================="
+          echo "Tool versions"
+          echo "================================================="
+
+          node -v
+          npm -v
+          mbt --version
+
+          echo "================================================="
+          echo "Clean previous MTA build"
+          echo "================================================="
+
+          rm -rf gen mta_archives resources
+
+          echo "================================================="
+          echo "Build MTAR"
+          echo "================================================="
+
+          mbt build -p cf -t mta_archives
+
+          echo "================================================="
+          echo "Generated MTAR"
+          echo "================================================="
+
+          ls -lah mta_archives
+        '''
+      }
+
+      stash(
+        name: 'mtar',
+        includes: "${env.REPOSITORY_NAME}/ui5/mta_archives/*.mtar",
+        useDefaultExcludes: false
+      )
+    }
+  }
+}
+
+    /* =========================================================
+     * DEPLOY CF (SAP-BTP POD)
+     * ========================================================= */
+    stage('Deploy') {
+
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'sap-btp',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      steps {
+
+        container('sap-btp') {
+
+          unstash 'updated-source'
+
+          withCredentials([
+            usernamePassword(
+              credentialsId: 'sap-btp',
+              usernameVariable: 'CF_USER',
+              passwordVariable: 'CF_PASSWORD'
+            )
+          ]) {
+
+            dir("${env.REPOSITORY_NAME}/ui5") {
+
+              sh '''
+                set -e
+
+                cf version
+
+                cf install-plugin -f multiapps || true
+
+                cf login \
+                  -a "$CF_API" \
+                  -u "$CF_USER" \
+                  -p "$CF_PASSWORD" \
+                  -o "$CF_ORG" \
+                  -s "$CF_SPACE"
+
+                if [ -d "dist" ]; then
+                  cf push ui5-app -p dist
+                else
+                  echo "No dist folder found"
+                  exit 1
+                fi
+              '''
+            }
+          }
+        }
+      }
+    }
+
+    /* =========================================================
+     * COMMIT & TAG (GH POD)
+     * ========================================================= */
+    stage('Commit & Tag') {
+
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'gh',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      steps {
+
+        container('gh') {
+
+          unstash 'updated-source'
+          unstash 'version'
+
+          withCredentials([
+            usernamePassword(
+              credentialsId: 'github-token',
+              usernameVariable: 'GIT_USER',
+              passwordVariable: 'GIT_TOKEN'
+            )
+          ]) {
+
+            dir("${env.REPOSITORY_NAME}") {
+
+              sh '''
+                set -e
+
+                VERSION=$(cat version.env | sed 's/VERSION=//')
+                [ -z "$VERSION" ] && exit 0
+
+                git config user.email "ci@jenkins"
+                git config user.name "Jenkins CI"
+
+                git remote set-url origin \
+                  https://${GIT_USER}:${GIT_TOKEN}@github.com/KPICorporate/${REPOSITORY_NAME}.git
+
+                git add package.json webapp/manifest.json
+
+                git commit -m "chore(release): ${VERSION} [skip ci]" || true
+
+                git tag -f "v${VERSION}"
+
+                git push origin main
+                git push origin --tags
+              '''
+            }
+          }
+        }
+      }
+    }
+  }
+}
