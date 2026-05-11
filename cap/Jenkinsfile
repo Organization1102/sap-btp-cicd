@@ -276,13 +276,11 @@ pipeline {
         # =========================
         sed -i 's/"version": *"[^"]*"/"version": "'"$VERSION"'"/' "$PACKAGE_FILE"
 
-        echo "Updated $PACKAGE_FILE"
-
         # =========================
-        # Aggiorna SOLO le 2 versioni root
-        # del package-lock.json
+        # Aggiorna SOLO:
+        # - version root
+        # - packages."" .version
         # =========================
-
         TMP_FILE=$(mktemp)
 
         awk -v version="$VERSION" '
@@ -291,8 +289,9 @@ pipeline {
         }
 
         {
-          if ($0 ~ /"version": *"/ && versionCount < 2) {
-            sub(/"version": *"[^"]*"/, "\"version\": \"" version "\"")
+          if ($0 ~ /"version"[[:space:]]*:/ && versionCount < 2) {
+            gsub(/"version"[[:space:]]*:[[:space:]]*"[^"]*"/,
+                  "\"version\": \"" version "\"")
             versionCount++
           }
 
@@ -302,15 +301,13 @@ pipeline {
 
         mv "$TMP_FILE" "$PACKAGE_LOCK_FILE"
 
-        echo "Updated $PACKAGE_LOCK_FILE"
-
-        echo "===== mta.yaml ====="
+        echo "===== UPDATED mta.yaml ====="
         cat "$MTA_FILE"
 
-        echo "===== package.json ====="
+        echo "===== UPDATED package.json ====="
         cat "$PACKAGE_FILE"
 
-        echo "===== package-lock.json ====="
+        echo "===== UPDATED package-lock.json ====="
         cat "$PACKAGE_LOCK_FILE"
       '''
     }
