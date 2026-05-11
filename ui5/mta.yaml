@@ -1,6 +1,6 @@
 _schema-version: "3.2"
 ID: kupit-flexiblewf-mta
-version: 0.0.5
+version: 1.0.1
 build-parameters:
   before-all:
     - builder: custom
