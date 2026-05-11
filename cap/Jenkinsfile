@@ -268,49 +268,18 @@ pipeline {
         echo "Updated $MTA_FILE"
 
         # =========================
-        # Aggiorna package.json
+        # Aggiorna package.json e package-lock.json
         # =========================
-        node -e "
-          const fs = require('fs');
-          const file = 'cap/package.json';
-          const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
-          pkg.version = process.env.VERSION;
-          fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\\n');
-        "
+        cd cap
 
-        echo "Updated cap/package.json"
+        npm version "$VERSION" --no-git-tag-version
 
-        # =========================
-        # Aggiorna package-lock.json
-        # SOLO root version e packages[''].version
-        # =========================
-        node -e "
-          const fs = require('fs');
-          const file = 'cap/package-lock.json';
-          const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+        echo "===== package.json ====="
+        cat package.json
 
-          pkg.version = process.env.VERSION;
-
-          if (pkg.packages && pkg.packages['']) {
-            pkg.packages[''].version = process.env.VERSION;
-          }
-
-          fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\\n');
-        "
-
-        echo "Updated cap/package-lock.json"
-
-        echo '===== mta.yaml ====='
-        cat cap/mta.yaml
-
-        echo '===== package.json ====='
-        cat cap/package.json
-
-        echo '===== package-lock.json ====='
-        cat cap/package-lock.json
-      ''' + """
-      export VERSION=${VERSION}
-      """
+        echo "===== package-lock.json ====="
+        cat package-lock.json
+      '''
     }
           }
 
