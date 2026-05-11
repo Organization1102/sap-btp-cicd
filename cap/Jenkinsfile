@@ -279,15 +279,14 @@ pipeline {
         echo "Updated $PACKAGE_FILE"
 
         # =========================
-        # Aggiorna SOLO le 2 versioni root
-        # nel package-lock.json
+        # Aggiorna SOLO:
+        # - version root
+        # - packages."" .version
         # =========================
-
-        # prima occorrenza root
-        sed -i '0,/"version": *"[^"]*"/s//"version": "'"$VERSION"'"/' "$PACKAGE_LOCK_FILE"
-
-        # seconda occorrenza dentro packages.""
-        sed -i '0,/"version": *"[^"]*"/s//"version": "'"$VERSION"'"/' "$PACKAGE_LOCK_FILE"
+        perl -0777 -i -pe '
+          s/"version":\\s*"[^"]*"/"version": "'$VERSION'"/;
+          s/("packages":\\s*\\{\\s*"":\\s*\\{[^\\}]*"version":\\s*")([^"]*)"/${1}'"$VERSION"'"/s;
+        ' "$PACKAGE_LOCK_FILE"
 
         echo "Updated $PACKAGE_LOCK_FILE"
 
