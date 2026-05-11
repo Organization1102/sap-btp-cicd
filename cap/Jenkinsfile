@@ -248,27 +248,59 @@ pipeline {
           dir("${env.REPOSITORY_NAME}") {
 
 			sh '''
-			  set -e
+        set -e
 
-			  VERSION=$(cat version.env | sed 's/VERSION=//')
+        VERSION=$(cat version.env | sed 's/VERSION=//')
 
-			  echo "Updating version to $VERSION"
+        echo "Updating version to $VERSION"
 
-			  MTA_FILE="cap/mta.yaml"
+        MTA_FILE="cap/mta.yaml"
+        PACKAGE_FILE="cap/package.json"
+        PACKAGE_LOCK_FILE="cap/package-lock.json"
 
-			  ls -la cap
+        ls -la cap
 
-			  if grep -q "^version:" "$MTA_FILE"; then
-			    sed -i "s/^version:.*/version: $VERSION/" "$MTA_FILE"
-			  else
-				  echo "version: $VERSION" >> "$MTA_FILE"
-			  fi
+        # =========================
+        # Aggiorna mta.yaml
+        # =========================
+        if grep -q "^version:" "$MTA_FILE"; then
+          sed -i "s/^version:.*/version: $VERSION/" "$MTA_FILE"
+        else
+          echo "version: $VERSION" >> "$MTA_FILE"
+        fi
 
-			  echo "Updated $MTA_FILE"
+        echo "Updated $MTA_FILE"
 
-			  cat "$MTA_FILE"
-			'''
-}
+        # =========================
+        # Aggiorna package.json
+        # =========================
+        sed -i 's/"version": *"[^"]*"/"version": "'"$VERSION"'"/' "$PACKAGE_FILE"
+
+        echo "Updated $PACKAGE_FILE"
+
+        # =========================
+        # Aggiorna SOLO le 2 versioni root
+        # nel package-lock.json
+        # =========================
+
+        # prima occorrenza root
+        sed -i '0,/"version": *"[^"]*"/s//"version": "'"$VERSION"'"/' "$PACKAGE_LOCK_FILE"
+
+        # seconda occorrenza dentro packages.""
+        sed -i '0,/"version": *"[^"]*"/s//"version": "'"$VERSION"'"/' "$PACKAGE_LOCK_FILE"
+
+        echo "Updated $PACKAGE_LOCK_FILE"
+
+        echo "===== mta.yaml ====="
+        cat "$MTA_FILE"
+
+        echo "===== package.json ====="
+        cat "$PACKAGE_FILE"
+
+        echo "===== package-lock.json ====="
+        cat "$PACKAGE_LOCK_FILE"
+      '''
+    }
           }
 
           stash(
