@@ -279,14 +279,28 @@ pipeline {
         echo "Updated $PACKAGE_FILE"
 
         # =========================
-        # Aggiorna SOLO:
-        # - version root
-        # - packages."" .version
+        # Aggiorna SOLO le 2 versioni root
+        # del package-lock.json
         # =========================
-        perl -0777 -i -pe '
-          s/"version":\\s*"[^"]*"/"version": "'$VERSION'"/;
-          s/("packages":\\s*\\{\\s*"":\\s*\\{[^\\}]*"version":\\s*")([^"]*)"/${1}'"$VERSION"'"/s;
-        ' "$PACKAGE_LOCK_FILE"
+
+        TMP_FILE=$(mktemp)
+
+        awk -v version="$VERSION" '
+        BEGIN {
+          versionCount=0
+        }
+
+        {
+          if ($0 ~ /"version": *"/ && versionCount < 2) {
+            sub(/"version": *"[^"]*"/, "\"version\": \"" version "\"")
+            versionCount++
+          }
+
+          print
+        }
+        ' "$PACKAGE_LOCK_FILE" > "$TMP_FILE"
+
+        mv "$TMP_FILE" "$PACKAGE_LOCK_FILE"
 
         echo "Updated $PACKAGE_LOCK_FILE"
 
