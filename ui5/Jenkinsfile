@@ -543,7 +543,7 @@ sh '''
                 echo "Deploy MTAR"
                 echo "================================================="
 
-                cf deploy "$MTAR" -f
+                cf deploy "$MTAR" -r
               '''
             }
           }
