@@ -8,7 +8,7 @@
 		"title": "{{appTitle}}",
 		"description": "{{appDescription}}",
 		"applicationVersion": { 
-			"version": "1.0.1"
+			"version": "2.0.0"
 		},
 		"resources": "resources.json",
 		"dataSources": {
@@ -63,7 +63,7 @@
 		},
 		"sourceTemplate": {
 			"id": "sap.ui.ui5-template-plugin.2masterdetail",
-			"version": "1.0.1"
+			"version": "2.0.0"
 		},
         "crossNavigation": {
             "inbounds": {
