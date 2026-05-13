@@ -15,7 +15,6 @@ pipeline {
 
     GH_ORGANIZATION = 'KPICorporate'
     REPOSITORY_NAME = 'sap-btp-cicd'
-    REPO_SEMANTIC = 'sap-btp-wflibero2-ui5-cicd'
     JENKINS_ENV     = 'PROD'
 
     NEXUS_URL  = 'https://nexus.automation-platform.eu-west-1.aws.q8int.com'
@@ -119,7 +118,7 @@ sh '''
 
             sh """
               git remote set-url origin \
-                https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPO_SEMANTIC}.git
+                https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
             """
 
             withEnv([
