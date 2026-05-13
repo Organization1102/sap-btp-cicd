@@ -439,7 +439,7 @@ sh '''
 					  echo "Version : $VERSION"
 
 					  HTTP_CODE=$(curl \
-					  --insecure \
+					  -v --insecure \
 					  -H "Authorization: Basic ${NEXUS_TOKEN_B64}" \
 					  -H "Content-Type: application/octet-stream" \
 					  --upload-file "$MTAR_FILE" \
