@@ -119,6 +119,8 @@ pipeline {
               git fetch ui5 --tags
 
               git tag -l
+          }
+              
 
 
 sh '''
@@ -187,7 +189,6 @@ sh '''
       )
     }
   }
-}
 
     /* =========================================================
      * UPDATE VERSION FILES (SAP-BTP POD)
