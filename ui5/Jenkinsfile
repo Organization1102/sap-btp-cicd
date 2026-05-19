@@ -123,6 +123,8 @@ pipeline {
                 withEnv([
                   "GITHUB_TOKEN=${githubToken}",
                   "GH_TOKEN=${githubToken}",
+                  "BRANCH_NAME=main",
+                  "GIT_BRANCH=main",
                   "CI=true"
                 ]) {
 
@@ -143,7 +145,10 @@ pipeline {
                       --branches main \
                       --dry-run \
                       --no-ci \
-                      > semantic.log 2>&1 || true
+                      --plugins \
+                        @semantic-release/commit-analyzer \
+                        @semantic-release/release-notes-generator \
+                      2>&1 | tee semantic.log || true
 
                     cat semantic.log
 
