@@ -115,10 +115,6 @@ resources:
               URL: https://ui5.sap.com
               ProxyType: Internet
               Authentication: NoAuthentication
-            - Name: flexiblewfcdm-rt
-              URL: https://cf-kupit-dev-yy6gs83h.launchpad.cfapps.eu10.hana.ondemand.com
-              ProxyType: Internet
-              Authentication: NoAuthentication
           existing_destinations_policy: update
 - name: kupit-flexiblewf_html_repo_host
   type: org.cloudfoundry.managed-service
