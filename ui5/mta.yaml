@@ -108,6 +108,14 @@ resources:
     config:
       HTML5Runtime_enabled: true
       init_data:
+        instance:
+          destinations:
+          - Authentication: NoAuthentication
+            Name: ui5
+            ProxyType: Internet
+            Type: HTTP
+            URL: https://ui5.sap.com
+          existing_destinations_policy: update
         subaccount:
           destinations:
           - Authentication: NoAuthentication
