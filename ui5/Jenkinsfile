@@ -97,6 +97,8 @@ pipeline {
 
         container('sap-btp') {
 
+          unstash 'source'
+
           withAwsSecret([
             secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
             type: "keyvalue"
@@ -105,76 +107,87 @@ pipeline {
             script {
 
               def githubToken = env.token
-              def targetRepo  = "sap-btp-wflibero2-ui5-cicd"
 
-              dir("repo") {
+              dir("${env.REPOSITORY_NAME}") {
+              
+              echo "================================================="
+              echo "Sync tags from UI5 repo"
+              echo "================================================="
 
-                sh """
-                  git clone https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${targetRepo}.git .
-                  git checkout main
-                  git log -1 --oneline
-                """
+              git remote add ui5 https://x-access-token:${GITHUB_TOKEN}@github.com/${GH_ORGANIZATION}/sap-btp-wflibero2-ui5-cicd.git || true
 
-                sh '''
-                  node -v
-                  npm -v
-                '''
+              git fetch ui5 --tags
 
-                withEnv([
-                  "GITHUB_TOKEN=${githubToken}",
-                  "GH_TOKEN=${githubToken}",
-                  "BRANCH_NAME=main",
-                  "GIT_BRANCH=main",
-                  "CI=true"
-                ]) {
+              git tag -l
 
-                  sh """
-                    set -e
 
-                    echo "Installing semantic-release..."
+sh '''
+              node -v
+              npm -v
+            '''
 
-                    npm install --no-save \
-                      semantic-release \
-                      @semantic-release/commit-analyzer \
-                      @semantic-release/release-notes-generator \
-                      @semantic-release/git
+            sh """
+              git remote set-url origin \
+                https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
+            """
 
-                    echo "Running semantic-release dry-run..."
+            withEnv([
+              "GITHUB_TOKEN=${githubToken}",
+              "GH_TOKEN=${githubToken}",
+              "GIT_BRANCH=main",
+              "BRANCH_NAME=main",
+              "CI=true",
+              "NO_COLOR=1",
+              "FORCE_COLOR=0"
+            ]) {
 
-                    npx semantic-release \
-                      --branches main \
-                      --dry-run \
-                      --no-ci \
-                      --plugins \
-                        @semantic-release/commit-analyzer \
-                        @semantic-release/release-notes-generator \
-                      2>&1 | tee semantic.log || true
+              sh '''
+                set -e
 
-                    cat semantic.log
+                echo "Installing semantic-release..."
 
-                    VERSION=\$(grep 'next release version is' semantic.log | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | tail -1)
+                npm install --no-save \
+                  semantic-release \
+                  @semantic-release/commit-analyzer \
+                  @semantic-release/release-notes-generator \
+                  @semantic-release/git
 
-                    if [ -z "\$VERSION" ]; then
-                      echo "ERROR: Unable to detect semantic-release version"
-                      exit 1
-                    fi
+                echo "Running semantic-release dry-run..."
 
-                    echo "VERSION=\$VERSION" > ${WORKSPACE}/${REPOSITORY_NAME}/version.env
-                    echo "Next version: \$VERSION"
-                  """
+                npx semantic-release \
+                  --branches main \
+                  --dry-run \
+                  --no-ci \
+                  --plugins \
+                    @semantic-release/commit-analyzer \
+                    @semantic-release/release-notes-generator \
+                    @semantic-release/git \
+                  > semantic.log 2>&1 || true
+
+                cat semantic.log
+
+                VERSION=$(grep 'next release version is' semantic.log | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | tail -1)
+
+                [ -z "$VERSION" ] && {
+                  echo "Unable to detect semantic-release version"
+                  exit 1
                 }
-              }
+
+                echo "VERSION=$VERSION" > version.env
+                echo "Next version: $VERSION"
+              '''
             }
           }
         }
-
-        stash(
-          name: 'version',
-          includes: "${env.REPOSITORY_NAME}/version.env"
-        )
       }
-    }
 
+      stash(
+        name: 'version',
+        includes: "${env.REPOSITORY_NAME}/version.env"
+      )
+    }
+  }
+}
 
     /* =========================================================
      * UPDATE VERSION FILES (SAP-BTP POD)
