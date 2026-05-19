@@ -543,16 +543,6 @@ sh '''
                 echo "Deploy MTAR"
                 echo "================================================="
 
-                echo "================================================="
-                echo "Existing MTA status"
-                echo "================================================="
-
-                cf mta || true
-                
-                cf undeploy kupit-flexiblewf-mta \
-                  --delete-services \
-                  --delete-service-keys || true
-
                 cf deploy "$MTAR" -f --delete-services --delete-service-keys          
               '''
             }
