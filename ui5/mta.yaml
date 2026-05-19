@@ -105,29 +105,18 @@ resources:
 - name: kupit-flexiblewf-destination-service
   type: org.cloudfoundry.managed-service
   parameters:
+    service: destination
+    service-plan: lite
+    service-name: kupit-flexiblewf-destination-service
     config:
-      HTML5Runtime_enabled: true
       init_data:
-        instance:
-          destinations:
-          - Authentication: NoAuthentication
-            Name: ui5
-            ProxyType: Internet
-            Type: HTTP
-            URL: https://ui5.sap.com
-          existing_destinations_policy: update
         subaccount:
           destinations:
-          - Authentication: NoAuthentication
-            Name: flexiblewfcdm-rt
-            ProxyType: Internet
-            Type: HTTP
-            URL: https://cf-kupit-dev-yy6gs83h.launchpad.cfapps.eu10.hana.ondemand.com
+            - Name: ui5
+              URL: https://ui5.sap.com
+              ProxyType: Internet
+              Authentication: NoAuthentication
           existing_destinations_policy: update
-      version: 1.0.0
-    service: destination
-    service-name: kupit-flexiblewf-destination-service
-    service-plan: lite
 - name: kupit-flexiblewf_html_repo_host
   type: org.cloudfoundry.managed-service
   parameters:
