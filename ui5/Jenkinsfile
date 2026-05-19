@@ -553,9 +553,7 @@ sh '''
                   --delete-services \
                   --delete-service-keys || true
 
-                cf deploy "$MTAR" -f \ 
-                  --delete-services \
-                  --delete-service-keys 
+                cf deploy "$MTAR" -f --delete-services --delete-service-keys          
               '''
             }
           }
