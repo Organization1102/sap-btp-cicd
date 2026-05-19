@@ -61,10 +61,17 @@ modules:
         existing_destinations_policy: update
       subaccount:
         destinations:
-        - Name: flexiblewf_cdm
-          ServiceInstanceName: kupit-flexiblewf-html5-app-runtime-service
-          ServiceKeyName: kupit-flexiblewf-html5-app-runtime-key
-          URL: https://html5-apps-repo-rt.cfapps.eu10.hana.ondemand.com/applications/cdm/kupit-flexiblewf-app
+
+          - Name: flexiblewf_cdm
+            ServiceInstanceName: kupit-flexiblewf-html5-app-runtime-service
+            ServiceKeyName: kupit-flexiblewf-html5-app-runtime-key
+
+          - Name: flexiblewfcdm-rt
+            URL: https://cf-kupit-dev-yy6gs83h.launchpad.cfapps.eu10.hana.ondemand.com
+            ProxyType: Internet
+            Authentication: NoAuthentication
+            Type: HTTP
+
         existing_destinations_policy: update
   build-parameters:
     no-source: true
