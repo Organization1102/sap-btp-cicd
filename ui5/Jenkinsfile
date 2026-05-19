@@ -113,12 +113,16 @@ pipeline {
               echo "================================================="
               echo "Sync tags from UI5 repo"
               echo "================================================="
-
-              git remote add ui5 https://x-access-token:${GITHUB_TOKEN}@github.com/${GH_ORGANIZATION}/sap-btp-wflibero2-ui5-cicd.git || true
-
-              git fetch ui5 --tags
-
-              git tag -l
+              
+              withEnv([
+                 "GITHUB_TOKEN=${githubToken}"
+              ]) {
+                sh '''
+                  git remote add ui5 https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-wflibero2-ui5-cicd.git || true
+                  git fetch ui5 --tags
+                  git push origin --tags
+                '''
+              }
           }
               
 
