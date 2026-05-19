@@ -124,6 +124,15 @@ pipeline {
                     git remote set-url origin https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-cicd.git
                     git push origin --tags
                   '''
+                  sh '''
+                    echo "================================================="
+                    echo "Force align last tag to HEAD"
+                    echo "================================================="
+
+                    git tag -f v2.0.0 HEAD
+                    git push origin v2.0.0 --force
+                  '''
+
               }
 
 sh '''
