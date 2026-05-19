@@ -120,6 +120,10 @@ pipeline {
                 sh '''
                   git remote add ui5 https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-wflibero2-ui5-cicd.git || true
                   git fetch ui5 --tags
+                  
+                  # FIX: forza origin su HTTPS
+                  git remote set-url origin https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-cicd.git
+                  
                   git push origin --tags
                 '''
               }
