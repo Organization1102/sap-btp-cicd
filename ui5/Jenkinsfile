@@ -540,6 +540,15 @@ sh '''
                   -s "$CF_SPACE"
 
                 echo "================================================="
+                echo "CLEAN MTA"
+                echo "================================================="
+
+                cf undeploy kupit-flexiblewf-mta \
+                  --delete-services \
+                  --delete-service-keys \
+                  -f || true
+
+                echo "================================================="
                 echo "Deploy MTAR"
                 echo "================================================="
 
