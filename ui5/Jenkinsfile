@@ -109,27 +109,22 @@ pipeline {
               def githubToken = env.token
 
               dir("${env.REPOSITORY_NAME}") {
-              
-              echo "================================================="
-              echo "Sync tags from UI5 repo"
-              echo "================================================="
-              
-              withEnv([
-                 "GITHUB_TOKEN=${githubToken}"
-              ]) {
-                sh '''
-                  git remote add ui5 https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-wflibero2-ui5-cicd.git || true
-                  git fetch ui5 --tags
-                  
-                  # FIX: forza origin su HTTPS
-                  git remote set-url origin https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-cicd.git
-                  
-                  git push origin --tags
-                '''
-              }
-          }
-              
 
+                withEnv([
+                  "GITHUB_TOKEN=${githubToken}"
+                ]) {
+                  sh '''
+                    echo "================================================="
+                    echo "Sync tags from UI5 repo"
+                    echo "================================================="
+                
+                    git remote add ui5 https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-wflibero2-ui5-cicd.git || true
+                    git fetch ui5 --tags
+                  
+                    git remote set-url origin https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-cicd.git
+                    git push origin --tags
+                  '''
+              }
 
 sh '''
               node -v
@@ -186,6 +181,7 @@ sh '''
                 echo "VERSION=$VERSION" > version.env
                 echo "Next version: $VERSION"
               '''
+              }
             }
           }
         }
