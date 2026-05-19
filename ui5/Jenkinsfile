@@ -110,24 +110,23 @@ pipeline {
 
               dir("${env.REPOSITORY_NAME}") {
 
-  sh '''
-    set -e
+            sh '''
+              set -e
 
-    echo "Setting remotes..."
+              echo "Setting remotes..."
 
-    git remote add ui5 https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-wflibero2-ui5-cicd.git || true
+              git remote add ui5 https://x-access-token:${githubToken}@github.com/KPICorporate/sap-btp-wflibero2-ui5-cicd.git || true
 
-    git fetch ui5 main
+              git fetch ui5 main
 
-    echo "Rebasing UI5 commits into sap-btp-cicd working copy..."
-    git pull ui5 main --rebase
+              echo "Rebasing UI5 commits into sap-btp-cicd working copy..."
+              git pull ui5 main --rebase
 
-    echo "Last commits after rebase:"
-    git log -5 --oneline
-  '''
+              echo "Last commits after rebase:"
+              git log -5 --oneline
+            '''
 
-
-              }
+          }
 
 sh '''
               node -v
