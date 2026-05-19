@@ -110,28 +110,22 @@ pipeline {
 
               dir("${env.REPOSITORY_NAME}") {
 
-                withEnv([
-                  "GITHUB_TOKEN=${githubToken}"
-                ]) {
-                  sh '''
-                    echo "================================================="
-                    echo "Sync tags from UI5 repo"
-                    echo "================================================="
-                
-                    git remote add ui5 https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-wflibero2-ui5-cicd.git || true
-                    git fetch ui5 --tags
-                  
-                    git remote set-url origin https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-cicd.git
-                    git push origin --tags
-                  '''
-                  sh '''
-                    echo "================================================="
-                    echo "Force align last tag to HEAD"
-                    echo "================================================="
+  sh '''
+    set -e
 
-                    git tag -f v2.0.0 HEAD
-                    git push origin v2.0.0 --force
-                  '''
+    echo "Setting remotes..."
+
+    git remote add ui5 https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-wflibero2-ui5-cicd.git || true
+
+    git fetch ui5 main
+
+    echo "Rebasing UI5 commits into sap-btp-cicd working copy..."
+    git pull ui5 main --rebase
+
+    echo "Last commits after rebase:"
+    git log -5 --oneline
+  '''
+
 
               }
 
@@ -673,4 +667,3 @@ sh '''
       }
     }
   }
-}
