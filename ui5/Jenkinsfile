@@ -107,8 +107,9 @@ pipeline {
             script {
 
               def githubToken = env.token
+              def targetRepo  = "sap-btp-wflibero2-ui5-cicd"
 
-              dir("${env.REPOSITORY_NAME}") {
+               {
 
 
 sh '''
@@ -163,7 +164,7 @@ sh '''
                   exit 1
                 }
 
-                echo "VERSION=$VERSION" > version.env
+                echo "VERSION=$VERSION" > ${WORKSPACE}/${REPOSITORY_NAME}/version.env
                 echo "Next version: $VERSION"
               '''
             }
