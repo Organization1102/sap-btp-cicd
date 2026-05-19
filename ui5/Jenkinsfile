@@ -106,7 +106,7 @@ pipeline {
 
             script {
 
-              def githubToken = env.token
+              withEnv(["GITHUB_TOKEN=${env.token}"]) {
 
               dir("${env.REPOSITORY_NAME}") {
 
@@ -115,7 +115,7 @@ pipeline {
 
               echo "Setting remotes..."
 
-              git remote add ui5 https://x-access-token:${githubToken}@github.com/KPICorporate/sap-btp-wflibero2-ui5-cicd.git || true
+              git remote add ui5 https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/sap-btp-wflibero2-ui5-cicd.git || true
 
               git fetch ui5 main
 
@@ -125,8 +125,8 @@ pipeline {
               echo "Last commits after rebase:"
               git log -5 --oneline
             '''
-
           }
+        }
 
 sh '''
               node -v
