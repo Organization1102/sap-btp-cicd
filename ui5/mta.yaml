@@ -61,17 +61,9 @@ modules:
         existing_destinations_policy: update
       subaccount:
         destinations:
-
           - Name: flexiblewf_cdm
             ServiceInstanceName: kupit-flexiblewf-html5-app-runtime-service
             ServiceKeyName: kupit-flexiblewf-html5-app-runtime-key
-
-          - Name: flexiblewfcdm-rt
-            URL: https://cf-kupit-dev-yy6gs83h.launchpad.cfapps.eu10.hana.ondemand.com
-            ProxyType: Internet
-            Authentication: NoAuthentication
-            Type: HTTP
-
         existing_destinations_policy: update
   build-parameters:
     no-source: true
@@ -121,6 +113,10 @@ resources:
           destinations:
             - Name: ui5
               URL: https://ui5.sap.com
+              ProxyType: Internet
+              Authentication: NoAuthentication
+            - Name: flexiblewfcdm-rt
+              URL: https://cf-kupit-dev-yy6gs83h.launchpad.cfapps.eu10.hana.ondemand.com
               ProxyType: Internet
               Authentication: NoAuthentication
           existing_destinations_policy: update
