@@ -81,6 +81,63 @@ pipeline {
     }
 
     /* =========================================================
+    * BOOTSTRAP UI5 TAG
+    * ========================================================= */
+
+    stage('Bootstrap UI5 Tag (one-shot)') {
+
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'sap-btp',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      steps {
+
+        container('sap-btp') {
+
+          unstash 'source'
+
+          withAwsSecret([
+            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+            type: "keyvalue"
+          ]) {
+
+            script {
+
+              def githubToken = env.token
+
+              dir("${env.REPOSITORY_NAME}") {
+
+                sh """
+                  set -e
+
+                  git remote set-url origin \
+                    https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
+
+                  git fetch --tags --force
+
+                  echo "Checking if ui5 tags already exist..."
+
+                  if git tag | grep -q '^ui5-v'; then
+                    echo "UI5 tags already exist → skip bootstrap"
+                  else
+                    echo "No UI5 tag found → creating ui5-v2.0.0"
+
+                    git tag ui5-v2.0.0
+                    git push origin ui5-v2.0.0
+                  fi
+                """
+              }
+            }
+          }
+        }
+      }
+    }
+
+    /* =========================================================
      * SEMANTIC RELEASE (SAP-BTP POD)
      * ========================================================= */
     stage('Semantic Release (dry-run)') {
@@ -146,7 +203,7 @@ sh '''
 
                 npx semantic-release \
                   --branches main \
-                  --dry-run \
+                  --tag-format 'ui5-v${version}' \
                   --no-ci \
                   --plugins \
                     @semantic-release/commit-analyzer \
@@ -156,7 +213,7 @@ sh '''
 
                 cat semantic.log
 
-                VERSION=$(grep 'next release version is' semantic.log | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | tail -1)
+                VERSION=$(grep -Eo '[0-9]+\\.[0-9]+\\.[0-9]+' semantic.log | tail -1)
 
                 [ -z "$VERSION" ] && {
                   echo "Unable to detect semantic-release version"
