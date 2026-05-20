@@ -217,7 +217,7 @@ sh '''
                   echo "NO_RELEASE=true" > version.env
                   echo "No new release"
                 else
-                  VERSION=$(grep 'next release version is' semantic.log | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')
+                  VERSION=$(grep 'next release version is' semantic.log | grep -Eo '[0-9]+[.][0-9]+[.][0-9]+')
 
                   if [ -z "$VERSION" ]; then
                     echo "ERROR: Unable to detect version"
