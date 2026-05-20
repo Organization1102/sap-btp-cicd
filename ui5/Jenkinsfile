@@ -141,7 +141,7 @@ pipeline {
     /* =========================================================
      * SEMANTIC RELEASE (SAP-BTP POD)
      * ========================================================= */
-    stage('Semantic Release (dry-run)') {
+    stage('Semantic Release') {
 
       agent {
         kubernetes(k8sAgent(
@@ -242,6 +242,35 @@ sh '''
     }
   }
 }
+
+    stage('Load Version Info') {
+
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'sap-btp',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      steps {
+
+        container('sap-btp') {
+
+          unstash 'version'
+
+          script {
+            def props = readProperties file: "${env.REPOSITORY_NAME}/version.env"
+
+            env.NO_RELEASE = props.NO_RELEASE ?: "false"
+            env.VERSION    = props.VERSION ?: ""
+
+            echo "Loaded VERSION = ${env.VERSION}"
+            echo "Loaded NO_RELEASE = ${env.NO_RELEASE}"
+          }
+        }
+      }
+    } 
 
     stage('Release Gate') {
 
