@@ -6,6 +6,7 @@ pipeline {
     ansiColor('xterm')
     disableConcurrentBuilds()
     skipDefaultCheckout(true)
+    skipStagesAfterUnstable()
   }
 
   environment {
@@ -241,6 +242,23 @@ sh '''
     }
   }
 }
+
+    stage('Release Gate') {
+
+      steps {
+        script {
+
+          if (env.NO_RELEASE == 'true') {
+            echo "No release detected → stopping pipeline"
+
+            currentBuild.result = 'UNSTABLE'
+            return
+          }
+
+            echo "Release detected → continuing pipeline"
+        }
+      }
+    }
 
     /* =========================================================
      * UPDATE VERSION FILES (SAP-BTP POD)
