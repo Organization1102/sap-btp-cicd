@@ -276,16 +276,16 @@ sh '''
 
                 [ -z "$VERSION" ] && exit 0
 
-                echo "Updating UI5 version to $VERSION"
-
                 sed -i "s/^version: .*/version: $VERSION/" ui5/mta.yaml
 
-                sed -i "s|\"version\": \"[^\"]*\"|\"version\": \"$VERSION\"|" ui5/myinbox/package.json
+                apk add --no-cache jq || true
 
-                sed -i "s|\"version\": \"[^\"]*\"|\"version\": \"$VERSION\"|" ui5/myinbox/webapp/manifest.json
+                jq --arg v "$VERSION" '.version=$v' ui5/myinbox/package.json > tmp && mv tmp ui5/myinbox/package.json
+
+                jq --arg v "$VERSION" '.version=$v' ui5/myinbox/webapp/manifest.json > tmp && mv tmp ui5/myinbox/webapp/manifest.json
               fi
             '''
-          }
+          } 
 
           stash(
             name: 'updated-source',
