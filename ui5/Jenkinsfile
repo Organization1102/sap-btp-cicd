@@ -200,7 +200,7 @@ sh '''
                   @semantic-release/release-notes-generator \
                   @semantic-release/git
 
-                echo "Running semantic-release dry-run..."
+                echo "Running semantic-release..."
 
                 npx semantic-release \
                   --branches main \
