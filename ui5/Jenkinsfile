@@ -280,9 +280,9 @@ sh '''
 
                 sed -i "s/^version: .*/version: $VERSION/" ui5/mta.yaml
 
-                sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" ui5/myinbox/package.json
-                
-                sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" ui5/myinbox/webapp/manifest.json
+                sed -i "s|\"version\": \"[^\"]*\"|\"version\": \"$VERSION\"|" ui5/myinbox/package.json
+
+                sed -i "s|\"version\": \"[^\"]*\"|\"version\": \"$VERSION\"|" ui5/myinbox/webapp/manifest.json
               fi
             '''
           }
