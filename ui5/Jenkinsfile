@@ -213,15 +213,21 @@ sh '''
 
                 cat semantic.log
 
-                VERSION=$(grep -Eo '[0-9]+\\.[0-9]+\\.[0-9]+' semantic.log | tail -1)
+                if grep -q "no new version is released" semantic.log; then
+                  echo "NO_RELEASE=true" > version.env
+                  echo "No new release"
+                else
+                  VERSION=$(grep 'next release version is' semantic.log | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')
 
-                [ -z "$VERSION" ] && {
-                  echo "Unable to detect semantic-release version"
-                  exit 1
-                }
+                  if [ -z "$VERSION" ]; then
+                    echo "ERROR: Unable to detect version"
+                    exit 1
+                  fi
 
-                echo "VERSION=$VERSION" > version.env
-                echo "Next version: $VERSION"
+                  echo "VERSION=$VERSION" > version.env
+                  echo "NO_RELEASE=false" >> version.env
+                  echo "Next version: $VERSION"
+                fi
               '''
             }
           }
@@ -260,15 +266,22 @@ sh '''
 
             sh '''
               set -e
+              
+              NO_RELEASE=$(grep 'NO_RELEASE=' version.env | cut -d '=' -f2)
 
-              VERSION=$(cat version.env | sed 's/VERSION=//')
-              [ -z "$VERSION" ] && exit 0
+              if [ "$NO_RELEASE" = "true" ]; then
+                echo "Skipping version update"
+              else
+                VERSION=$(grep '^VERSION=' version.env | cut -d '=' -f2)
 
-              echo "Updating UI5 version to $VERSION"
+                [ -z "$VERSION" ] && exit 0
 
-              sed -i "s/^version: .*/version: $VERSION/" ui5/mta.yaml
-              sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" ui5/myinbox/package.json
-              sed -i "s/\\"version\\": \\".*\\"/\\"version\\": \\"$VERSION\\"/" ui5/myinbox/webapp/manifest.json
+                echo "Updating UI5 version to $VERSION"
+
+                sed -i "s/^version: .*/version: $VERSION/" ui5/mta.yaml
+                sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" ui5/myinbox/package.json
+                sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" ui5/myinbox/webapp/manifest.json
+              fi
             '''
           }
 
@@ -651,6 +664,13 @@ sh '''
           sh """
   set -e
 
+  NO_RELEASE=$(grep 'NO_RELEASE=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
+
+  if [ "$NO_RELEASE" = "true" ]; then
+    echo "Skipping commit & tag"
+    exit 0
+  fi
+
   VERSION=\$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
   if [ -z "\$VERSION" ]; then
@@ -693,12 +713,17 @@ sh '''
   myinbox/webapp/manifest.json
 
 
-  git commit -m "chore(release): \$VERSION [skip ci]" || true
+  if git diff --cached --quiet; then
+    echo "No changes to commit"
+  else
+    git commit -m "chore(release): $VERSION [skip ci]"
+    git push origin main
+  fi
 
   git tag -f "v\$VERSION"
 
   git push origin main
-  git push origin --tags --force
+  git push origin "v$VERSION"
 """
             }
           }
