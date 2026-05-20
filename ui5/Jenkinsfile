@@ -661,76 +661,80 @@ sh '''
         script {
 
           def githubToken = env.token
-          def targetRepo = "sap-btp-wflibero2-ui5-cicd"
+
+          withEnv(["GITHUB_TOKEN=${githubToken}"]) {
 
           sh '''
-  set -e
+            set -e
 
-  NO_RELEASE=$(grep 'NO_RELEASE=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
+            NO_RELEASE=$(grep 'NO_RELEASE=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
-  if [ "$NO_RELEASE" = "true" ]; then
-    echo "Skipping commit & tag"
-    exit 0
-  fi
+            if [ "$NO_RELEASE" = "true" ]; then
+              echo "Skipping commit & tag"
+              exit 0
+            fi
 
-  VERSION=\$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
+            VERSION=\$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
-  if [ -z "\$VERSION" ]; then
-    echo "ERROR: VERSION is empty"
-    exit 1
-  fi
+            if [ -z "\$VERSION" ]; then
+              echo "ERROR: VERSION is empty"
+              exit 1
+            fi
 
-  echo "Using VERSION: \$VERSION"
+            echo "Using VERSION: \$VERSION"
 
-  TARGET_REPO="sap-btp-wflibero2-ui5-cicd"
-  TARGET_DIR="/tmp/\$TARGET_REPO"
+            TARGET_REPO="sap-btp-wflibero2-ui5-cicd"
+            TARGET_DIR="/tmp/\$TARGET_REPO"
 
-  echo "Target dir: \$TARGET_DIR"
+            echo "Target dir: \$TARGET_DIR"
 
-  git config --global user.email "ci@jenkins"
-  git config --global user.name "Jenkins CI"
+            git config --global user.email "ci@jenkins"
+            git config --global user.name "Jenkins CI"
 
-  echo "Cloning repo..."
+            echo "Cloning repo..."
 
-  rm -rf "\$TARGET_DIR"
+            rm -rf "\$TARGET_DIR"
 
-  git clone https://x-access-token:${githubToken}@github.com/KPICorporate/\$TARGET_REPO.git "\$TARGET_DIR"
+            git clone https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/\$TARGET_REPO.git "\$TARGET_DIR"
 
-  if [ ! -d "\$TARGET_DIR/.git" ]; then
-    echo "ERROR: clone failed"
-    exit 1
-  fi
+            if [ ! -d "\$TARGET_DIR/.git" ]; then
+              echo "ERROR: clone failed"
+              exit 1
+            fi
 
-  cd "\$TARGET_DIR"
+            cd "\$TARGET_DIR"
 
-  echo "Copy files"
+            echo "Copy files"
 
-  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/mta.yaml mta.yaml
-  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/myinbox/package.json myinbox/package.json
-  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/myinbox/webapp/manifest.json myinbox/webapp/manifest.json
+            cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/mta.yaml mta.yaml
+            cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/myinbox/package.json myinbox/package.json
+            cp -f ${WORKSPACE}/${REPOSITORY_NAME}/ui5/myinbox/webapp/manifest.json myinbox/webapp/manifest.json
 
-  git add \
-  mta.yaml \
-  myinbox/package.json \
-  myinbox/webapp/manifest.json
+            git add \
+            mta.yaml \
+            myinbox/package.json \
+            myinbox/webapp/manifest.json
 
 
-  if git diff --cached --quiet; then
-    echo "No changes to commit"
-  else
-    git commit -m "chore(release): $VERSION [skip ci]"
-    git push origin main
-  fi
+            if git diff --cached --quiet; then
+              echo "No changes to commit"
+            else
+              git commit -m "chore(release): $VERSION [skip ci]"
+              git push origin main
+            fi
 
-  git tag -f "v\$VERSION"
+            echo "Creating tag v$VERSION"
 
-  git push origin main
-  git push origin "v$VERSION"
-'''
+            git tag -f "v\$VERSION"
+
+            git push origin main
+            git push origin "v$VERSION" --force
+          '''
             }
           }
         }
       }
     }
   }
+ }
 }
