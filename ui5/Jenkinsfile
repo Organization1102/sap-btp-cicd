@@ -661,7 +661,7 @@ sh '''
           def githubToken = env.token
           def targetRepo = "sap-btp-wflibero2-ui5-cicd"
 
-          sh """
+          sh '''
   set -e
 
   NO_RELEASE=$(grep 'NO_RELEASE=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
@@ -724,7 +724,7 @@ sh '''
 
   git push origin main
   git push origin "v$VERSION"
-"""
+'''
             }
           }
         }
