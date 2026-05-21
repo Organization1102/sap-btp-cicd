@@ -652,78 +652,78 @@ pipeline {
      * ========================================================= */
     stage('Commit & Tag') {
 
-  agent {
-    kubernetes(k8sAgent(
-      cloud: 'kubernetes',
-      podTemplate: 'gh',
-      serviceAccount: 'jenkins'
-    ))
-  }
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'gh',
+          serviceAccount: 'jenkins'
+        ))
+      }
 
-  steps {
+      steps {
 
-    container('gh') {
+        container('gh') {
 
-      unstash 'updated-source'
-      unstash 'version'
+          unstash 'updated-source'
+          unstash 'version'
 
-      withAwsSecret([
-        secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
-        type: "keyvalue"
-      ]) {
+          withAwsSecret([
+            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+            type: "keyvalue"
+          ]) {
 
-        script {
+            script {
 
-          def githubToken = env.token
-          def targetRepo = "sap-btp-wflibero2-cap-cicd"
+              def githubToken = env.token
+              def targetRepo = "sap-btp-wflibero2-cap-cicd"
 
-          sh """
-  set -e
+              sh '''
+      set -e
 
-NO_RELEASE=$(grep 'NO_RELEASE=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
+    NO_RELEASE=$(grep 'NO_RELEASE=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
-if [ "$NO_RELEASE" = "true" ]; then
-  echo "Skipping commit & tag"
-  exit 0
-fi
+    if [ "$NO_RELEASE" = "true" ]; then
+      echo "Skipping commit & tag"
+      exit 0
+    fi
 
-VERSION=$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
+    VERSION=$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
-if [ -z "$VERSION" ]; then
-  echo "ERROR: VERSION is empty"
-  exit 1
-fi
+    if [ -z "$VERSION" ]; then
+      echo "ERROR: VERSION is empty"
+      exit 1
+    fi
 
-echo "Using VERSION: $VERSION"
+    echo "Using VERSION: $VERSION"
 
-TARGET_REPO="sap-btp-wflibero2-cap-cicd"
-TARGET_DIR="/tmp/$TARGET_REPO"
+    TARGET_REPO="sap-btp-wflibero2-cap-cicd"
+    TARGET_DIR="/tmp/$TARGET_REPO"
 
-git config --global user.email "ci@jenkins"
-git config --global user.name "Jenkins CI"
+    git config --global user.email "ci@jenkins"
+    git config --global user.name "Jenkins CI"
 
-rm -rf "$TARGET_DIR"
+    rm -rf "$TARGET_DIR"
 
-git clone https://x-access-token:${githubToken}@github.com/KPICorporate/$TARGET_REPO.git "$TARGET_DIR"
+    git clone https://x-access-token:${githubToken}@github.com/KPICorporate/$TARGET_REPO.git "$TARGET_DIR"
 
-cd "$TARGET_DIR"
+    cd "$TARGET_DIR"
 
-cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/mta.yaml mta.yaml
-cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package.json package.json
-cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package-lock.json package-lock.json
+    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/mta.yaml mta.yaml
+    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package.json package.json
+    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package-lock.json package-lock.json
 
-git add mta.yaml package.json package-lock.json
+    git add mta.yaml package.json package-lock.json
 
-if git diff --cached --quiet; then
-  echo "No changes to commit"
-else
-  git commit -m "chore(release): $VERSION [skip ci]"
-  git push origin main
-fi
+    if git diff --cached --quiet; then
+      echo "No changes to commit"
+    else
+      git commit -m "chore(release): $VERSION [skip ci]"
+      git push origin main
+    fi
 
-git tag -f "v$VERSION"
-git push origin "v$VERSION"
-"""
+    git tag -f "v$VERSION"
+    git push origin "v$VERSION"
+  '''
             }
           }
         }
