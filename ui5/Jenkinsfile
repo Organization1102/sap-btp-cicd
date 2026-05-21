@@ -97,7 +97,7 @@ pipeline {
 
       environment {
         TAG_PREFIX = 'workflow' // ui5 | workflow | cap
-        INITIAL_VERSION = '4.0.0'
+        INITIAL_VERSION = '3.0.2'
       }
 
       steps {
