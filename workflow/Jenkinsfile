@@ -407,7 +407,7 @@ pipeline {
 					sh '''
 						set -e					
 
-					  VERSION=${env.VERSION}
+					  VERSION=$(grep '^VERSION=' ../version.env | cut -d '=' -f2)
 
 					  MTAR_FILE=$(ls mta_archives/*.mtar | head -n 1)
 
