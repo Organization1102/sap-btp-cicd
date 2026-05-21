@@ -140,7 +140,7 @@ pipeline {
     /* =========================================================
      * SEMANTIC RELEASE
      * ========================================================= */
-    stage('Semantic Release (dry-run)') {
+    stage('Semantic Release') {
 
       agent {
         kubernetes(k8sAgent(
