@@ -552,46 +552,67 @@ stage('Deploy') {
             script {
 
               def githubToken = env.token
-              def targetRepo = "sap-btp-wflibero2-workflow-cicd"
 
-              sh """
-    set -e
+              withEnv(["GITHUB_TOKEN=${githubToken}"]) {
 
-    if [ "${NO_RELEASE}" = "true" ]; then
-      echo "Skipping commit & tag"
-      exit 0
-    fi
+              sh '''
+                set -e
 
-    VERSION=${VERSION}
+                NO_RELEASE=$(grep 'NO_RELEASE=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
-    echo "Using VERSION: $VERSION"
+                if [ "$NO_RELEASE" = "true" ]; then
+                  echo "Skipping commit & tag"
+                  exit 0
+                fi
 
-    TARGET_REPO="${REPOSITORY_TARGET}"
-    TARGET_DIR="/tmp/$TARGET_REPO"
+                VERSION=\$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
-    git config --global user.email "ci@jenkins"
-    git config --global user.name "Jenkins CI"
+                if [ -z "\$VERSION" ]; then
+                  echo "ERROR: VERSION is empty"
+                  exit 1
+                fi
 
-    rm -rf "$TARGET_DIR"
+                echo "Using VERSION: \$VERSION"
 
-    git clone https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/$TARGET_REPO.git "$TARGET_DIR"
+                TARGET_REPO="sap-btp-wflibero2-worflow-cicd"
+                TARGET_DIR="/tmp/\$TARGET_REPO"
 
-    cd "$TARGET_DIR"
+                echo "Target dir: \$TARGET_DIR"
 
-    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/workflow/mta.yaml mta.yaml
+                git config --global user.email "ci@jenkins"
+                git config --global user.name "Jenkins CI"
 
-    git add mta.yaml
+                echo "Cloning repo..."
 
-    if git diff --cached --quiet; then
-      echo "No changes to commit"
-    else
-      git commit -m "chore(release): $VERSION [skip ci]"
-      git push origin main
-    fi
+                rm -rf "\$TARGET_DIR"
 
-    git tag -f "v$VERSION"
-    git push origin "v$VERSION"
-  """
+                git clone https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/\$TARGET_REPO.git "\$TARGET_DIR"
+
+                if [ ! -d "\$TARGET_DIR/.git" ]; then
+                  echo "ERROR: clone failed"
+                  exit 1
+                fi
+
+                cd "\$TARGET_DIR"
+
+                echo "Copy files"
+
+                cp -f ${WORKSPACE}/${REPOSITORY_NAME}/workflow/mta.yaml mta.yaml
+
+                git add mta.yaml
+
+                if git diff --cached --quiet; then
+                  echo "No changes to commit"
+                else
+                  git commit -m "chore(release): $VERSION [skip ci]"
+                  git push origin main
+                fi
+
+                git tag -f "v$VERSION"
+                git push origin main
+                git push origin "v$VERSION" --force
+              '''
+       }
       }
      }
     }
