@@ -262,7 +262,7 @@ pipeline {
       }
     }
 
-    stage('Gate: Continue only if release') {
+    stage('Release Gate') {
 
       agent any
 
