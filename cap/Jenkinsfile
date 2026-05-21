@@ -279,8 +279,9 @@ pipeline {
 
           if (env.NO_RELEASE == "true") {
             echo "No release detected → stopping pipeline"
-            currentBuild.result = 'NOT_BUILT'
-            error("Stopping pipeline (NO_RELEASE)")
+            
+            currentBuild.result = 'UNSTABLE'
+            return
           } else {
             echo "Release detected → continuing pipeline"
           }
