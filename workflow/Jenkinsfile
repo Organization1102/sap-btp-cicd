@@ -82,6 +82,69 @@ pipeline {
       }
     }
 
+    stage('Bootstrap Tag (one-shot)') {
+
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'sap-btp',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      environment {
+        TAG_PREFIX = 'workflow' // ui5 | workflow | cap
+        INITIAL_VERSION = '2.0.0'
+      }
+
+      steps {
+
+        container('sap-btp') {
+
+          unstash 'source'
+
+          withAwsSecret([
+            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+            type: "keyvalue"
+          ]) {
+
+            script {
+
+              def githubToken = env.token
+
+              dir("${env.REPOSITORY_NAME}") {
+
+                sh """
+                  set -e
+
+                  git remote set-url origin \
+                    https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
+
+                  git fetch --tags --force
+
+                  TAG="${TAG_PREFIX}-v${INITIAL_VERSION}"
+
+                  echo "Checking bootstrap tag: \$TAG"
+
+                  if git tag | grep -q "^\${TAG_PREFIX}-v"; then
+                    echo "Tags already exist → skip bootstrap"
+                  else
+                    echo "Creating bootstrap tag \$TAG"
+                    git tag "\$TAG"
+                    git push origin "\$TAG"
+                  fi
+                """
+              }
+            }
+          }
+        }
+      }
+    }
+
+    /* =========================================================
+     * SEMANTIC RELEASE
+     * ========================================================= */
+
     stage('Semantic Release') {
 
       agent {
@@ -139,16 +202,6 @@ pipeline {
                       @semantic-release/commit-analyzer \
                       @semantic-release/release-notes-generator \
                       @semantic-release/git
-
-                    echo "================================================="
-                    echo "Bootstrap check"
-                    echo "================================================="
-
-                    if ! git tag | grep -q "workflow-v2.0.0"; then
-                      echo "Bootstrap tag workflow-v2.0.0"
-                      git tag workflow-v2.0.0
-                      git push origin workflow-v2.0.0
-                    fi
 
                     echo "================================================="
                     echo "Running semantic-release..."
