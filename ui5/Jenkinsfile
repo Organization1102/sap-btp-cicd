@@ -333,9 +333,14 @@ sh '''
 
                 apk add --no-cache jq || true
 
-                jq --arg v "$VERSION" '.version=$v' ui5/myinbox/package.json > tmp && mv tmp ui5/myinbox/package.json
+                # package.json
+                jq --arg v "$VERSION" '.version=$v' \
+                  ui5/myinbox/package.json > tmp && mv tmp ui5/myinbox/package.json
 
-                jq --arg v "$VERSION" '.version=$v' ui5/myinbox/webapp/manifest.json > tmp && mv tmp ui5/myinbox/webapp/manifest.json
+                # manifest.json
+                jq --arg v "$VERSION" \
+                  '.["sap.app"].applicationVersion.version = $v' \
+                  ui5/myinbox/webapp/manifest.json > tmp && mv tmp ui5/myinbox/webapp/manifest.json
               fi
             '''
           } 
