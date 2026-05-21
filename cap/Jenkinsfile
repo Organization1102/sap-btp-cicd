@@ -6,6 +6,7 @@ pipeline {
     ansiColor('xterm')
     disableConcurrentBuilds()
     skipDefaultCheckout(true)
+    skipStagesAfterUnstable()
   }
 
   environment {
@@ -77,6 +78,65 @@ pipeline {
       }
     }
 
+    stage('Bootstrap Tag (one-shot)') {
+
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'sap-btp',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      environment {
+        TAG_PREFIX = 'cap' // ui5 | workflow | cap
+        INITIAL_VERSION = '2.0.0'
+      }
+
+      steps {
+
+        container('sap-btp') {
+
+          unstash 'source'
+
+          withAwsSecret([
+            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+            type: "keyvalue"
+          ]) {
+
+            script {
+
+              def githubToken = env.token
+
+              dir("${env.REPOSITORY_NAME}") {
+
+                sh """
+                  set -e
+
+                  git remote set-url origin \
+                    https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
+
+                  git fetch --tags --force
+
+                  TAG="${TAG_PREFIX}-v${INITIAL_VERSION}"
+
+                  echo "Checking bootstrap tag: \$TAG"
+
+                  if git tag | grep -q "^\${TAG_PREFIX}-v"; then
+                    echo "Tags already exist → skip bootstrap"
+                  else
+                    echo "Creating bootstrap tag \$TAG"
+                    git tag "\$TAG"
+                    git push origin "\$TAG"
+                  fi
+                """
+              }
+            }
+          }
+        }
+      }
+    }
+
     /* =========================================================
      * SEMANTIC RELEASE
      * ========================================================= */
@@ -140,28 +200,35 @@ pipeline {
 
 					          echo "Running semantic-release dry-run"
 
-					        npx semantic-release \
-					          --branches main \
-					          --dry-run \
-                    --no-ci \
-                    --plugins \
-                      @semantic-release/commit-analyzer \
-                      @semantic-release/release-notes-generator \
-                      @semantic-release/git \
-					          > semantic.log 2>&1 || true
+					          npx semantic-release \
+                      --branches main \
+                      --tag-format 'cap-v${version}' \
+                      --no-ci \
+                      --plugins \
+                        @semantic-release/commit-analyzer \
+                        @semantic-release/release-notes-generator \
+                        @semantic-release/git \
+                      > semantic.log 2>&1 || true
 
-					        cat semantic.log
+                    cat semantic.log
 
-					        VERSION=$(grep 'next release version is' semantic.log | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | tail -1)
+                    if grep -q "no new version is released" semantic.log; then
+                      echo "NO_RELEASE=true" > version.env
+                      echo "VERSION=" >> version.env
+                      echo "No new release"
+                    else
+                      VERSION=$(grep 'next release version is' semantic.log | grep -Eo '[0-9]+[.][0-9]+[.][0-9]+')
 
-					        [ -z "$VERSION" ] && {
-					          echo "Unable to detect semantic version"
-					          exit 1
-					        }
+                      if [ -z "$VERSION" ]; then
+                        echo "ERROR: Unable to detect version"
+                        exit 1
+                      fi
 
-					        echo "VERSION=$VERSION" > version.env
-					        echo "Next version: $VERSION"
-				        '''
+                      echo "VERSION=$VERSION" > version.env
+                      echo "NO_RELEASE=false" >> version.env
+                      echo "Next version: $VERSION"
+                    fi
+				          '''
                 }
               }
             }
@@ -171,6 +238,52 @@ pipeline {
             name: 'version',
             includes: "${env.REPOSITORY_NAME}/version.env"
           )
+        }
+      }
+    }
+
+    stage('Load Version') {
+
+      agent any
+
+      steps {
+
+        unstash 'version'
+
+        script {
+          def props = readProperties file: "${env.REPOSITORY_NAME}/version.env"
+
+          env.NO_RELEASE = props.NO_RELEASE
+          env.VERSION    = props.VERSION
+
+          echo "Loaded VERSION = ${env.VERSION}"
+          echo "Loaded NO_RELEASE = ${env.NO_RELEASE}"
+        }
+      }
+    }
+
+    stage('Gate: Continue only if release') {
+
+      agent any
+
+      steps {
+        unstash 'version'
+
+        script {
+          def props = readProperties file: "${env.REPOSITORY_NAME}/version.env"
+          env.NO_RELEASE = props.NO_RELEASE
+          env.VERSION    = props.VERSION
+
+          echo "Loaded VERSION = ${env.VERSION}"
+          echo "Loaded NO_RELEASE = ${env.NO_RELEASE}"
+
+          if (env.NO_RELEASE == "true") {
+            echo "No release detected → stopping pipeline"
+            currentBuild.result = 'NOT_BUILT'
+            error("Stopping pipeline (NO_RELEASE)")
+          } else {
+            echo "Release detected → continuing pipeline"
+          }
         }
       }
     }
@@ -230,6 +343,10 @@ pipeline {
      * ========================================================= */
     stage('Update Version Files') {
 
+      when {
+        expression { env.NO_RELEASE != "true" }
+      }
+
       agent {
         kubernetes(k8sAgent(
           cloud: 'kubernetes',
@@ -243,44 +360,41 @@ pipeline {
         container('sap-btp') {
 
           unstash 'installed-source'
-          unstash 'version'
 
           dir("${env.REPOSITORY_NAME}") {
 
-			sh '''
-        set -e
+            sh '''
+              set -e
 
-        VERSION=$(cat version.env | sed 's/VERSION=//')
+              echo "Updating version to $VERSION"
 
-        echo "Updating version to $VERSION"
+              MTA_FILE="cap/mta.yaml"
 
-        MTA_FILE="cap/mta.yaml"
+              # =========================
+              # Aggiorna mta.yaml
+              # =========================
+              if grep -q "^version:" "$MTA_FILE"; then
+                sed -i "s/^version:.*/version: $VERSION/" "$MTA_FILE"
+              else
+                echo "version: $VERSION" >> "$MTA_FILE"
+              fi
 
-        # =========================
-        # Aggiorna mta.yaml
-        # =========================
-        if grep -q "^version:" "$MTA_FILE"; then
-          sed -i "s/^version:.*/version: $VERSION/" "$MTA_FILE"
-        else
-          echo "version: $VERSION" >> "$MTA_FILE"
-        fi
+              echo "Updated $MTA_FILE"
+              cat "$MTA_FILE"
 
-        echo "Updated $MTA_FILE"
+              # =========================
+              # Aggiorna package.json e package-lock.json
+              # =========================
+              cd cap
 
-        # =========================
-        # Aggiorna package.json e package-lock.json
-        # =========================
-        cd cap
+              npm version "$VERSION" --no-git-tag-version
 
-        npm version "$VERSION" --no-git-tag-version
+              echo "===== package.json ====="
+              cat package.json
 
-        echo "===== package.json ====="
-        cat package.json
-
-        echo "===== package-lock.json ====="
-        cat package-lock.json
-      '''
-    }
+              echo "===== package-lock.json ====="
+              cat package-lock.json
+            '''
           }
 
           stash(
@@ -290,6 +404,7 @@ pipeline {
           )
         }
       }
+    }
 
     /* =========================================================
      * CLEAN
@@ -430,7 +545,7 @@ pipeline {
 					sh '''
 						set -e					
 
-					  VERSION=$(cat ../version.env | sed 's/VERSION=//')
+					  VERSION=$(grep '^VERSION=' ../version.env | cut -d '=' -f2)
 
 					  MTAR_FILE=$(ls mta_archives/*.mtar | head -n 1)
 
@@ -565,54 +680,49 @@ pipeline {
           sh """
   set -e
 
-  VERSION=\$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
+NO_RELEASE=$(grep 'NO_RELEASE=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
-  if [ -z "\$VERSION" ]; then
-    echo "ERROR: VERSION is empty"
-    exit 1
-  fi
+if [ "$NO_RELEASE" = "true" ]; then
+  echo "Skipping commit & tag"
+  exit 0
+fi
 
-  echo "Using VERSION: \$VERSION"
+VERSION=$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
 
-  TARGET_REPO="sap-btp-wflibero2-cap-cicd"
-  TARGET_DIR="/tmp/\$TARGET_REPO"
+if [ -z "$VERSION" ]; then
+  echo "ERROR: VERSION is empty"
+  exit 1
+fi
 
-  echo "Target dir: \$TARGET_DIR"
+echo "Using VERSION: $VERSION"
 
-  git config --global user.email "ci@jenkins"
-  git config --global user.name "Jenkins CI"
+TARGET_REPO="sap-btp-wflibero2-cap-cicd"
+TARGET_DIR="/tmp/$TARGET_REPO"
 
-  echo "Cloning repo..."
+git config --global user.email "ci@jenkins"
+git config --global user.name "Jenkins CI"
 
-  rm -rf "\$TARGET_DIR"
+rm -rf "$TARGET_DIR"
 
-  git clone https://x-access-token:${githubToken}@github.com/KPICorporate/\$TARGET_REPO.git "\$TARGET_DIR"
+git clone https://x-access-token:${githubToken}@github.com/KPICorporate/$TARGET_REPO.git "$TARGET_DIR"
 
-  if [ ! -d "\$TARGET_DIR/.git" ]; then
-    echo "ERROR: clone failed"
-    exit 1
-  fi
+cd "$TARGET_DIR"
 
-  cd "\$TARGET_DIR"
+cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/mta.yaml mta.yaml
+cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package.json package.json
+cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package-lock.json package-lock.json
 
-  echo "Copy files"
+git add mta.yaml package.json package-lock.json
 
-  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/mta.yaml mta.yaml
-  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package.json package.json
-  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package-lock.json package-lock.json
-
-  git add \
-  mta.yaml \
-  package.json \
-  package-lock.json
-
-
-  git commit -m "chore(release): \$VERSION [skip ci]" || true
-
-  git tag -f "v\$VERSION"
-
+if git diff --cached --quiet; then
+  echo "No changes to commit"
+else
+  git commit -m "chore(release): $VERSION [skip ci]"
   git push origin main
-  git push origin --tags --force
+fi
+
+git tag -f "v$VERSION"
+git push origin "v$VERSION"
 """
             }
           }
