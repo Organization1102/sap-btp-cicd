@@ -157,7 +157,6 @@ pipeline {
                     npx semantic-release \
                       --branches main \
                       --tag-format 'workflow-v${version}' \
-                      --dry-run \
                       --no-ci \
                       --plugins \
                         @semantic-release/commit-analyzer \
