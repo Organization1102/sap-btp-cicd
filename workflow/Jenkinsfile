@@ -81,100 +81,169 @@ pipeline {
       }
     }
 
-stage('Semantic Release (dry-run)') {
+    stage('Semantic Release') {
 
-  agent {
-    kubernetes(k8sAgent(
-      cloud: 'kubernetes',
-      podTemplate: 'sap-btp',
-      serviceAccount: 'jenkins'
-    ))
-  }
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'sap-btp',
+          serviceAccount: 'jenkins'
+        ))
+      }
 
-  steps {
+      steps {
 
-    container('sap-btp') {
+        container('sap-btp') {
 
-      unstash 'source'
+          unstash 'source'
 
-      withAwsSecret([
-        secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
-        type: "keyvalue"
-      ]) {
+          withAwsSecret([
+            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+            type: "keyvalue"
+          ]) {
 
-        script {
+            script {
 
-          def githubToken = env.token
+              def githubToken = env.token
 
-          dir("${env.REPOSITORY_NAME}") {
+              dir("${env.REPOSITORY_NAME}") {
 
-            sh '''
-              node -v
-              npm -v
-            '''
+                sh '''
+                  node -v
+                  npm -v
+                '''
 
-            sh """
-              git remote set-url origin \
-                https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
-            """
+                sh """
+                  git remote set-url origin \
+                    https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
+                """
 
-            withEnv([
-              "GITHUB_TOKEN=${githubToken}",
-              "GH_TOKEN=${githubToken}",
-              "GIT_BRANCH=main",
-              "BRANCH_NAME=main",
-              "CI=true",
-              "NO_COLOR=1",
-              "FORCE_COLOR=0"
-            ]) {
+                withEnv([
+                  "GITHUB_TOKEN=${githubToken}",
+                  "GH_TOKEN=${githubToken}",
+                  "GIT_BRANCH=main",
+                  "BRANCH_NAME=main",
+                  "CI=true",
+                  "NO_COLOR=1",
+                  "FORCE_COLOR=0"
+                ]) {
 
-              sh '''
-                set -e
+                  sh '''
+                    set -e
 
-                echo "Installing semantic-release..."
+                    echo "Installing semantic-release..."
 
-                npm install --no-save \
-                  semantic-release \
-                  @semantic-release/commit-analyzer \
-                  @semantic-release/release-notes-generator \
-                  @semantic-release/git
+                    npm install --no-save \
+                      semantic-release \
+                      @semantic-release/commit-analyzer \
+                      @semantic-release/release-notes-generator \
+                      @semantic-release/git
 
-                echo "Running semantic-release dry-run..."
+                    echo "================================================="
+                    echo "Bootstrap check"
+                    echo "================================================="
 
-                npx semantic-release \
-                  --branches main \
-                  --dry-run \
-                  --no-ci \
-                  --plugins \
-                    @semantic-release/commit-analyzer \
-                    @semantic-release/release-notes-generator \
-                    @semantic-release/git \
-                  > semantic.log 2>&1 || true
+                    if ! git tag | grep -q "workflow-v2.0.0"; then
+                      echo "Bootstrap tag workflow-v2.0.0"
+                      git tag workflow-v2.0.0
+                      git push origin workflow-v2.0.0
+                    fi
 
-                cat semantic.log
+                    echo "================================================="
+                    echo "Running semantic-release..."
+                    echo "================================================="
 
-                VERSION=$(grep 'next release version is' semantic.log | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | tail -1)
+                    npx semantic-release \
+                      --branches main \
+                      --tag-format 'workflow-v${version}' \
+                      --dry-run \
+                      --no-ci \
+                      --plugins \
+                        @semantic-release/commit-analyzer \
+                        @semantic-release/release-notes-generator \
+                        @semantic-release/git \
+                      > semantic.log 2>&1 || true
 
-                [ -z "$VERSION" ] && {
-                  echo "Unable to detect semantic-release version"
-                  exit 1
+                    cat semantic.log
+
+                    if grep -q "no new version is released" semantic.log; then
+                      echo "NO_RELEASE=true" > version.env
+                      echo "VERSION=" >> version.env
+                      echo "No new release"
+                    else
+                      VERSION=$(grep 'next release version is' semantic.log | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1)
+
+                      [ -z "$VERSION" ] && {
+                        echo "ERROR: Unable to detect version"
+                        exit 1
+                      }
+
+                      echo "VERSION=$VERSION" > version.env
+                      echo "NO_RELEASE=false" >> version.env
+
+                      echo "Next version: $VERSION"
+                    fi
+                  '''
                 }
-
-                echo "VERSION=$VERSION" > version.env
-                echo "Next version: $VERSION"
-              '''
+              }
             }
+          }
+
+          stash(
+            name: 'version',
+            includes: "${env.REPOSITORY_NAME}/version.env"
+          )
+        }
+      }
+    }
+
+    stage('Load Version Info') {
+
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'sap-btp',
+          serviceAccount: 'jenkins'
+        ))
+      }
+
+      steps {
+
+        container('sap-btp') {
+
+          unstash 'version'
+
+          script {
+            def props = readProperties file: "${env.REPOSITORY_NAME}/version.env"
+
+            env.NO_RELEASE = props.NO_RELEASE ?: "false"
+            env.VERSION    = props.VERSION ?: ""
+
+            echo "Loaded VERSION = ${env.VERSION}"
+            echo "Loaded NO_RELEASE = ${env.NO_RELEASE}"
           }
         }
       }
-
-      stash(
-        name: 'version',
-        includes: "${env.REPOSITORY_NAME}/version.env"
-      )
     }
-  }
-}
+
+    stage('Release Gate') {
+
+      steps {
+        script {
+
+          echo "Gate check → NO_RELEASE = ${env.NO_RELEASE}"
+
+          if (env.NO_RELEASE == 'true') {
+            echo "No release detected → stopping pipeline"
+
+            currentBuild.result = 'UNSTABLE'
+            return
+          }
+
+          echo "Release detected → continuing pipeline"
+        }
+      }
+    }
 
     /* =========================================================
      * UPDATE MTA VERSION
@@ -194,28 +263,38 @@ stage('Semantic Release (dry-run)') {
         container('sap-btp') {
 
           unstash 'source'
-          unstash 'version'
 
           dir("${env.REPOSITORY_NAME}") {
 
-            sh '''
-              set -e
+            script {
 
-              VERSION=$(cat version.env | sed 's/VERSION=//')
+              if (env.NO_RELEASE == 'true') {
+                echo "Skipping version update (NO_RELEASE)"
+                return
+              }
 
-              echo "Updating mta.yaml to version $VERSION"
+              sh """
+                set -e
 
-              MTA_FILE="workflow/mta.yaml"
+                VERSION=${env.VERSION}
 
-              ls -la workflow
+                if [ -z "\$VERSION" ]; then
+                  echo "ERROR: VERSION is empty"
+                  exit 1
+                fi
 
-              sed -i \
-                "s/^version: .*/version: $VERSION/" \
-                "$MTA_FILE"
+                echo "Updating mta.yaml to version \$VERSION"
 
-              echo "Updated file:"
-              cat "$MTA_FILE"
-            '''
+                MTA_FILE="workflow/mta.yaml"
+
+                ls -la workflow
+
+                sed -i "s/^version: .*/version: \$VERSION/" "\$MTA_FILE"
+
+                echo "Updated file:"
+                cat "\$MTA_FILE"
+              """
+            }
           }
 
           stash(
@@ -327,7 +406,7 @@ stage('Semantic Release (dry-run)') {
 					sh '''
 						set -e					
 
-					  VERSION=$(cat ../version.env | sed 's/VERSION=//')
+					  VERSION=${env.VERSION}
 
 					  MTAR_FILE=$(ls mta_archives/*.mtar | head -n 1)
 
@@ -450,81 +529,73 @@ stage('Deploy') {
      * ========================================================= */
     stage('Commit & Tag') {
 
-  agent {
-    kubernetes(k8sAgent(
-      cloud: 'kubernetes',
-      podTemplate: 'gh',
-      serviceAccount: 'jenkins'
-    ))
-  }
-
-  steps {
-
-    container('gh') {
-
-      unstash 'updated-source'
-      unstash 'version'
-
-      withAwsSecret([
-        secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
-        type: "keyvalue"
-      ]) {
-
-        script {
-
-          def githubToken = env.token
-          def targetRepo = "sap-btp-wflibero2-workflow-cicd"
-
-          sh """
-  set -e
-
-  VERSION=\$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
-
-  if [ -z "\$VERSION" ]; then
-    echo "ERROR: VERSION is empty"
-    exit 1
-  fi
-
-  echo "Using VERSION: \$VERSION"
-
-  TARGET_REPO="sap-btp-wflibero2-workflow-cicd"
-  TARGET_DIR="/tmp/\$TARGET_REPO"
-
-  echo "Target dir: \$TARGET_DIR"
-
-  git config --global user.email "ci@jenkins"
-  git config --global user.name "Jenkins CI"
-
-  echo "Cloning repo..."
-
-  rm -rf "\$TARGET_DIR"
-
-  git clone https://x-access-token:${githubToken}@github.com/KPICorporate/\$TARGET_REPO.git "\$TARGET_DIR"
-
-  if [ ! -d "\$TARGET_DIR/.git" ]; then
-    echo "ERROR: clone failed"
-    exit 1
-  fi
-
-  cd "\$TARGET_DIR"
-
-  echo "Copy files"
-
-  cp -f ${WORKSPACE}/${REPOSITORY_NAME}/workflow/mta.yaml mta.yaml
-
-  git add mta.yaml
-
-  git commit -m "chore(release): \$VERSION [skip ci]" || true
-
-  git tag -f "v\$VERSION"
-
-  git push origin main
-  git push origin --tags --force
-"""
-            }
-          }
-        }
+      agent {
+        kubernetes(k8sAgent(
+          cloud: 'kubernetes',
+          podTemplate: 'gh',
+          serviceAccount: 'jenkins'
+        ))
       }
+
+      steps {
+
+        container('gh') {
+
+          unstash 'updated-source'
+          unstash 'version'
+
+          withAwsSecret([
+            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
+            type: "keyvalue"
+          ]) {
+
+            script {
+
+              def githubToken = env.token
+              def targetRepo = "sap-btp-wflibero2-workflow-cicd"
+
+              sh """
+    set -e
+
+    if [ "${NO_RELEASE}" = "true" ]; then
+      echo "Skipping commit & tag"
+      exit 0
+    fi
+
+    VERSION=${VERSION}
+
+    echo "Using VERSION: $VERSION"
+
+    TARGET_REPO="${REPOSITORY_TARGET}"
+    TARGET_DIR="/tmp/$TARGET_REPO"
+
+    git config --global user.email "ci@jenkins"
+    git config --global user.name "Jenkins CI"
+
+    rm -rf "$TARGET_DIR"
+
+    git clone https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/$TARGET_REPO.git "$TARGET_DIR"
+
+    cd "$TARGET_DIR"
+
+    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/workflow/mta.yaml mta.yaml
+
+    git add mta.yaml
+
+    if git diff --cached --quiet; then
+      echo "No changes to commit"
+    else
+      git commit -m "chore(release): $VERSION [skip ci]"
+      git push origin main
+    fi
+
+    git tag -f "v$VERSION"
+    git push origin "v$VERSION"
+  """
+      }
+     }
     }
    }
   }
+ }
+}
