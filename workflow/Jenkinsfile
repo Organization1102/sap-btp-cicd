@@ -574,7 +574,7 @@ stage('Deploy') {
 
                 echo "Using VERSION: \$VERSION"
 
-                TARGET_REPO="sap-btp-wflibero2-worflow-cicd"
+                TARGET_REPO="sap-btp-wflibero2-workflow-cicd"
                 TARGET_DIR="/tmp/\$TARGET_REPO"
 
                 echo "Target dir: \$TARGET_DIR"
