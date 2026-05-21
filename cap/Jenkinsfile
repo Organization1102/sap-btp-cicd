@@ -676,7 +676,7 @@ pipeline {
             script {
 
               def githubToken = env.token
-              def targetRepo = "sap-btp-wflibero2-cap-cicd"
+              withEnv(["GITHUB_TOKEN=${githubToken}"]) {
 
               sh '''
       set -e
@@ -700,14 +700,24 @@ pipeline {
     TARGET_REPO="sap-btp-wflibero2-cap-cicd"
     TARGET_DIR="/tmp/$TARGET_REPO"
 
+    echo "Target dir: \$TARGET_DIR"
+
     git config --global user.email "ci@jenkins"
     git config --global user.name "Jenkins CI"
 
+    echo "Cloning repo..."
+
     rm -rf "$TARGET_DIR"
 
-    git clone https://x-access-token:${githubToken}@github.com/KPICorporate/$TARGET_REPO.git "$TARGET_DIR"
+    git clone https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/$TARGET_REPO.git "\$TARGET_DIR"
 
+    if [ ! -d "\$TARGET_DIR/.git" ]; then
+      echo "ERROR: clone failed"
+      exit 1
+    fi
     cd "$TARGET_DIR"
+    
+    echo "Copy files"
 
     cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/mta.yaml mta.yaml
     cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package.json package.json
@@ -723,7 +733,9 @@ pipeline {
     fi
 
     git tag -f "v$VERSION"
-    git push origin "v$VERSION"
+    
+    git push origin main
+    git push origin "v$VERSION" --force
   '''
             }
           }
@@ -731,5 +743,6 @@ pipeline {
       }
     }
   }
+ }
 }
  
