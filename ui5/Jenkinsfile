@@ -85,7 +85,7 @@ pipeline {
     * BOOTSTRAP UI5 TAG
     * ========================================================= */
 
-    stage('Bootstrap UI5 Tag (one-shot)') {
+    stage('Bootstrap Tag (one-shot)') {
 
       agent {
         kubernetes(k8sAgent(
@@ -93,6 +93,11 @@ pipeline {
           podTemplate: 'sap-btp',
           serviceAccount: 'jenkins'
         ))
+      }
+
+      environment {
+        TAG_PREFIX = 'ui5' // ui5 | workflow | cap
+        INITIAL_VERSION = '2.0.0'
       }
 
       steps {
@@ -120,15 +125,16 @@ pipeline {
 
                   git fetch --tags --force
 
-                  echo "Checking if ui5 tags already exist..."
+                  TAG="${TAG_PREFIX}-v${INITIAL_VERSION}"
 
-                  if git tag | grep -q '^ui5-v'; then
-                    echo "UI5 tags already exist → skip bootstrap"
+                  echo "Checking bootstrap tag: \$TAG"
+
+                  if git tag | grep -q "^\${TAG_PREFIX}-v"; then
+                    echo "Tags already exist → skip bootstrap"
                   else
-                    echo "No UI5 tag found → creating ui5-v2.0.0"
-
-                    git tag ui5-v2.0.0
-                    git push origin ui5-v2.0.0
+                    echo "Creating bootstrap tag \$TAG"
+                    git tag "\$TAG"
+                    git push origin "\$TAG"
                   fi
                 """
               }
