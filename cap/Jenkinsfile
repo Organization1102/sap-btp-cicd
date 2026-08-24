@@ -27,6 +27,18 @@ pipeline {
   }
 
   stages {
+  
+	stage('Verify Pipeline Branch') {
+		steps {
+			echo "PIPELINE REPOSITORY  = ${env.PIPELINE_REPOSITORY}"
+			echo "APPLICATION REPOSITORY = ${env.APPLICATION_REPOSITORY}"
+			echo "JENKINS ENV = ${env.JENKINS_ENV}"
+			echo "Running modified CAP pipeline"
+			echo "Pipeline branch: feature/checkout-app-repo"
+		}
+	}
+	
+	
 
     /* =========================================================
      * CHECKOUT
@@ -533,7 +545,7 @@ pipeline {
 
           stash(
             name: 'mtar',
-            includes: "${env.REPOSITORY_NAME}/cap/mta_archives/*.mtar",
+            includes: "${env.APPLICATION_REPOSITORY}/cap/mta_archives/*.mtar",
             useDefaultExcludes: false
           )
         }
