@@ -15,12 +15,15 @@ pipeline {
     CF_ORG   = 'Kuwait Petroleum Italia S.p.A.'
     CF_SPACE = 'FlexibleV1'
 
-    GH_ORGANIZATION = 'KPICorporate'
-    REPOSITORY_NAME = 'sap-btp-cicd'
+    GH_ORGANIZATION = 'KPICorporate'.
+	
+    PIPELINE_REPOSITORY = 'sap-btp-cicd'
+	APPLICATION_REPOSITORY = 'sap-btp-wflibero2-cap-cicd'
+	
     JENKINS_ENV     = 'PROD'
     
     NEXUS_URL  = 'https://nexus.automation-platform.eu-west-1.aws.q8int.com'
-	  NEXUS_REPO = 'sap-btp-raw-dev-hosted'
+	NEXUS_REPO = 'sap-btp-raw-dev-hosted'
   }
 
   stages {
@@ -28,7 +31,7 @@ pipeline {
     /* =========================================================
      * CHECKOUT
      * ========================================================= */
-    stage('Checkout') {
+    stage('Checkout Application') {
 
       agent {
         kubernetes(k8sAgent(
@@ -45,28 +48,58 @@ pipeline {
           script {
 
             def repoUrl =
-              "git@github.com:${env.GH_ORGANIZATION}/${env.REPOSITORY_NAME}.git"
+              "git@github.com:${env.GH_ORGANIZATION}/${env.APPLICATION_REPOSITORY}.git"
 
             def dkName = (
-              "AUT-PLAT-${env.JENKINS_ENV}-DK-${env.REPOSITORY_NAME}"
+              "AUT-PLAT-${env.JENKINS_ENV}-DK-${env.APPLICATION_REPOSITORY}"
             ).toUpperCase()
 
-            cloneWithDK(
+            echo "================================================="
+			echo "Checkout Application Repository"
+			echo "================================================="
+
+			echo "Repository:"
+			echo "${repoUrl}"
+
+			echo "Branch:"
+			echo "feature/checkout-app-repo"
+			
+			cloneWithDK(
               [
                 repo_url: repoUrl,
                 dk       : dkName,
-                branch   : 'main'
+                branch   : 'feature/checkout-app-repo'
               ]
             ) {
 
-              dir("${env.REPOSITORY_NAME}") {
+              sh '''
+				set -e
 
-                sh '''
-                  echo "Repository checked out"
-                  git status
-                '''
-              }
-            }
+				echo "Application repository checked out"
+
+				echo ""
+				echo "Current directory:"
+				pwd
+
+				echo ""
+				echo "Git status:"
+				git status
+
+				echo ""
+				echo "Repository content:"
+				ls -la
+
+				echo ""
+				echo "Checking package.json..."
+
+				if [ ! -f package.json ]; then
+				echo "ERROR: package.json not found"
+				exit 1
+				fi
+
+				echo "OK - package.json found"
+			  }
+			}
 
             stash(
               name: 'source',
@@ -165,7 +198,7 @@ pipeline {
 
               def githubToken = env.token
 
-              dir("${env.REPOSITORY_NAME}") {
+              dir("${env.APPLICATION_REPOSITORY}") {
 
                 sh '''
                   node -v
@@ -174,14 +207,14 @@ pipeline {
 
                 sh """
                   git remote set-url origin \
-                    https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
+                    https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${APPLICATION_REPOSITORY}.git
                 """
 
                 withEnv([
                   "GITHUB_TOKEN=${githubToken}",
                   "GH_TOKEN=${githubToken}",
-                  "GIT_BRANCH=main",
-                  "BRANCH_NAME=main",
+                  "GIT_BRANCH=feature/checkout-app-repo",
+                  "BRANCH_NAME=feature/checkout-app-repo",
                   "CI=true",
                   "NO_COLOR=1",
                   "FORCE_COLOR=0"
@@ -201,7 +234,7 @@ pipeline {
 					          echo "Running semantic-release dry-run"
 
 					          npx semantic-release \
-                      --branches main \
+                      --branches feature/checkout-app-repo \
                       --tag-format 'cap-v${version}' \
                       --no-ci \
                       --plugins \
@@ -236,7 +269,7 @@ pipeline {
 
           stash(
             name: 'version',
-            includes: "${env.REPOSITORY_NAME}/version.env"
+            includes: "${env.APPLICATION_REPOSITORY}/version.env"
           )
         }
       }
@@ -251,7 +284,7 @@ pipeline {
         unstash 'version'
 
         script {
-          def props = readProperties file: "${env.REPOSITORY_NAME}/version.env"
+          def props = readProperties file: "${env.APPLICATION_REPOSITORY}/version.env"
 
           env.NO_RELEASE = props.NO_RELEASE
           env.VERSION    = props.VERSION
@@ -270,7 +303,7 @@ pipeline {
         unstash 'version'
 
         script {
-          def props = readProperties file: "${env.REPOSITORY_NAME}/version.env"
+          def props = readProperties file: "${env.APPLICATION_REPOSITORY}/version.env"
           env.NO_RELEASE = props.NO_RELEASE
           env.VERSION    = props.VERSION
 
@@ -308,7 +341,7 @@ pipeline {
 
           unstash 'source'
 
-          dir("${env.REPOSITORY_NAME}/cap") {
+          dir("${env.APPLICATION_REPOSITORY}") {
 
             sh '''
               set -e
@@ -362,14 +395,14 @@ pipeline {
 
           unstash 'installed-source'
 
-          dir("${env.REPOSITORY_NAME}") {
+          dir("${env.APPLICATION_REPOSITORY}") {
 
             sh '''
               set -e
 
               echo "Updating version to $VERSION"
 
-              MTA_FILE="cap/mta.yaml"
+              MTA_FILE="mta.yaml"
 
               # =========================
               # Aggiorna mta.yaml
@@ -386,7 +419,6 @@ pipeline {
               # =========================
               # Aggiorna package.json e package-lock.json
               # =========================
-              cd cap
 
               npm version "$VERSION" --no-git-tag-version
 
@@ -426,7 +458,7 @@ pipeline {
 
           unstash 'updated-source'
 
-          dir("${env.REPOSITORY_NAME}/cap") {
+          dir("${env.APPLICATION_REPOSITORY}") {
 
             sh '''
               set -e
@@ -466,7 +498,7 @@ pipeline {
 
           unstash 'clean-source'
 
-          dir("${env.REPOSITORY_NAME}/cap") {
+          dir("${env.APPLICATION_REPOSITORY}") {
 
             sh '''
               set -e
@@ -541,7 +573,7 @@ pipeline {
 						"NEXUS_TOKEN_B64=${nexusToken}"
 					]) {
 
-				dir("${env.REPOSITORY_NAME}/cap") {
+				dir("${env.APPLICATION_REPOSITORY}") {
 
 					sh '''
 						set -e					
@@ -620,7 +652,7 @@ pipeline {
                 "CF_PASSWORD=${btpPassword}"
               ]) {
 
-            dir("${env.REPOSITORY_NAME}/cap") {
+            dir("${env.APPLICATION_REPOSITORY}") {
 
               sh '''
                 set -e
@@ -719,9 +751,9 @@ pipeline {
     
     echo "Copy files"
 
-    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/mta.yaml mta.yaml
-    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package.json package.json
-    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package-lock.json package-lock.json
+    cp -f ${WORKSPACE}/${APPLICATION_REPOSITORY}/mta.yaml mta.yaml
+    cp -f ${WORKSPACE}/${APPLICATION_REPOSITORY}/package.json package.json
+    cp -f ${WORKSPACE}/${APPLICATION_REPOSITORY}/package-lock.json package-lock.json
 
     git add mta.yaml package.json package-lock.json
 
