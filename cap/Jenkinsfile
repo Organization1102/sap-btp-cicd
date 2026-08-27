@@ -667,6 +667,12 @@ stage('Semantic Release') {
 
         stage('CDS Build') {
 
+             when {
+                expression {
+                    env.NO_RELEASE == 'false'
+                }
+            }
+
             steps {
 
                 dir("${PROJECT_DIR}") {
