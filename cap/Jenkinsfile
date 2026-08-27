@@ -1,748 +1,918 @@
+// ================================================================
+// Q8 DevOps CAP Template v2.0
+// ================================================================
+
 pipeline {
-
-  agent none
-
-  options {
-    ansiColor('xterm')
-    disableConcurrentBuilds()
-    skipDefaultCheckout(true)
-    skipStagesAfterUnstable()
-  }
-
-  environment {
-
-    CF_API   = 'https://api.cf.eu10-004.hana.ondemand.com'
-    CF_ORG   = 'Kuwait Petroleum Italia S.p.A.'
-    CF_SPACE = 'FlexibleV1'
-
-    GH_ORGANIZATION = 'KPICorporate'
-    REPOSITORY_NAME = 'sap-btp-cicd'
-    JENKINS_ENV     = 'PROD'
+    agent any
     
-    NEXUS_URL  = 'https://nexus.automation-platform.eu-west-1.aws.q8int.com'
-	  NEXUS_REPO = 'sap-btp-raw-dev-hosted'
-  }
-
-  stages {
-
-    /* =========================================================
-     * CHECKOUT
-     * ========================================================= */
-    stage('Checkout') {
-
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
-
-      steps {
-
-        container('gh') {
-
-          script {
-
-            def repoUrl =
-              "git@github.com:${env.GH_ORGANIZATION}/${env.REPOSITORY_NAME}.git"
-
-            def dkName = (
-              "AUT-PLAT-${env.JENKINS_ENV}-DK-${env.REPOSITORY_NAME}"
-            ).toUpperCase()
-
-            cloneWithDK(
-              [
-                repo_url: repoUrl,
-                dk       : dkName,
-                branch   : 'main'
-              ]
-            ) {
-
-              dir("${env.REPOSITORY_NAME}") {
-
-                sh '''
-                  echo "Repository checked out"
-                  git status
-                '''
-              }
-            }
-
-            stash(
-              name: 'source',
-              includes: '**',
-              useDefaultExcludes: false
-            )
-          }
-        }
-      }
+    options {
+        ansiColor('xterm')
+        timestamps()
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+        skipStagesAfterUnstable()
     }
 
-    stage('Bootstrap Tag (one-shot)') {
+    environment {
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
-          serviceAccount: 'jenkins'
-        ))
-      }
+        // ========================================================
+        // PROJECT
+        // ========================================================
 
-      environment {
-        TAG_PREFIX = 'cap' // ui5 | workflow | cap
-        INITIAL_VERSION = '2.0.0'
-      }
+        PROJECT_DIR = '.'
+        MTA_FILE = 'mta.yaml'
+        MTAR_DIR = 'mta_archives'
 
-      steps {
+        // ========================================================
+        // SAP BTP
+        // ========================================================
 
-        container('sap-btp') {
+        CF_API   = 'https://api.cf.us10-001.hana.ondemand.com'
+        CF_ORG   = '3d52b474trial'
+        CF_SPACE = 'dev'
 
-          unstash 'source'
+        // ========================================================
+        // GITHUB
+        // ========================================================
 
-          withAwsSecret([
-            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
-            type: "keyvalue"
-          ]) {
+        GH_ORGANIZATION = 'Organization1102'
+        REPOSITORY_NAME = 'sap-btp-wflibero2-cap-cicd'
 
-            script {
+        // ========================================================
+        // NEXUS
+        // ========================================================
 
-              def githubToken = env.token
-
-              dir("${env.REPOSITORY_NAME}") {
-
-                sh """
-                  set -e
-
-                  git remote set-url origin \
-                    https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
-
-                  git fetch --tags --force
-
-                  TAG="${TAG_PREFIX}-v${INITIAL_VERSION}"
-
-                  echo "Checking bootstrap tag: \$TAG"
-
-                  if git tag | grep -q "^\${TAG_PREFIX}-v"; then
-                    echo "Tags already exist → skip bootstrap"
-                  else
-                    echo "Creating bootstrap tag \$TAG"
-                    git tag "\$TAG"
-                    git push origin "\$TAG"
-                  fi
-                """
-              }
-            }
-          }
-        }
-      }
+        NEXUS_URL  = 'https://nexus.example'
+        NEXUS_REPO = 'sap-btp-raw-dev-hosted'
     }
 
-    /* =========================================================
-     * SEMANTIC RELEASE
-     * ========================================================= */
-    stage('Semantic Release') {
+    stages {
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
-          serviceAccount: 'jenkins'
-        ))
-      }
+        // ========================================================
+        // CHECKOUT
+        // ========================================================
 
-      steps {
+        stage('Checkout') {
 
-        container('sap-btp') {
+            steps {
 
-          unstash 'source'
+                checkout scm
+            }
+        }
 
-          withAwsSecret([
-            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
-            type: "keyvalue"
-          ]) {
+        // ========================================================
+        // VERIFY ENVIRONMENT
+        // ========================================================
 
-            script {
+        stage('Verify Environment') {
 
-              def githubToken = env.token
-
-              dir("${env.REPOSITORY_NAME}") {
+            steps {
 
                 sh '''
-                  node -v
-                  npm -v
+
+                    set -e
+
+                    echo "================================================="
+                    echo "Verify Build Environment"
+                    echo "================================================="
+
+                    echo ""
+                    echo "Java"
+                    java -version
+
+                    echo ""
+                    echo "Node"
+                    node -v
+
+                    echo ""
+                    echo "NPM"
+                    npm -v
+
+                    echo ""
+                    echo "Git"
+                    git --version
+
+                    echo ""
+                    echo "Cloud Foundry CLI"
+                    cf version
+
+                    echo ""
+                    echo "Cloud Foundry Plugins"
+                    cf plugins
+
+                    echo ""
+                    echo "MBT"
+                    mbt --version
+
+                    echo ""
+                    echo "CDS"
+                    cds --version
+
+                    echo ""
+                    echo "Semantic Release"
+                    semantic-release --version
+
+                    echo ""
+                    echo "JQ"
+                    jq --version
+
+                    echo ""
+                    echo "YQ"
+                    yq --version
+
+                    echo ""
+                    echo "Environment verification completed"
+
                 '''
+            }
+        }
 
-                sh """
-                  git remote set-url origin \
-                    https://x-access-token:${githubToken}@github.com/${GH_ORGANIZATION}/${REPOSITORY_NAME}.git
-                """
+        // ========================================================
+        // VALIDATE PROJECT
+        // ========================================================
 
-                withEnv([
-                  "GITHUB_TOKEN=${githubToken}",
-                  "GH_TOKEN=${githubToken}",
-                  "GIT_BRANCH=main",
-                  "BRANCH_NAME=main",
-                  "CI=true",
-                  "NO_COLOR=1",
-                  "FORCE_COLOR=0"
+        stage('Validate Project') {
+
+            steps {
+
+                dir("${PROJECT_DIR}") {
+
+                    sh '''
+
+                        set -e
+
+                        echo "================================================="
+                        echo "Validate CAP Project"
+                        echo "================================================="
+
+                        echo ""
+                        echo "Current directory:"
+                        pwd
+
+                        echo ""
+                        echo "Repository content:"
+                        ls -la
+
+
+                        # ------------------------------------------------
+                        # package.json
+                        # ------------------------------------------------
+
+                        echo ""
+                        echo "Checking package.json..."
+
+                        if [ ! -f "package.json" ]; then
+
+                            echo "ERROR: package.json not found"
+
+                            exit 1
+
+                        fi
+
+                        echo "OK - package.json found"
+
+
+                        # ------------------------------------------------
+                        # mta.yaml
+                        # ------------------------------------------------
+
+                        echo ""
+                        echo "Checking mta.yaml..."
+
+                        if [ ! -f "mta.yaml" ]; then
+
+                            echo "ERROR: mta.yaml not found"
+
+                            exit 1
+
+                        fi
+
+                        echo "OK - mta.yaml found"
+
+
+                        # ------------------------------------------------
+                        # CAP directories
+                        # ------------------------------------------------
+
+                        echo ""
+                        echo "Checking CAP project structure..."
+
+
+                        if [ ! -d "srv" ]; then
+
+                            echo "ERROR: srv directory not found"
+
+                            exit 1
+
+                        fi
+
+                        echo "OK - srv directory found"
+
+
+                        if [ ! -d "db" ]; then
+
+                            echo "ERROR: db directory not found"
+
+                            exit 1
+
+                        fi
+
+                        echo "OK - db directory found"
+
+
+                        if [ -d "app" ]; then
+
+                            echo "OK - app directory found"
+
+                        else
+
+                            echo "INFO - app directory not found"
+
+                        fi
+
+
+                        # ------------------------------------------------
+                        # xs-security.json
+                        # ------------------------------------------------
+
+                        echo ""
+                        echo "Checking security configuration..."
+
+
+                        if [ -f "xs-security.json" ]; then
+
+                            echo "OK - xs-security.json found"
+
+                        else
+
+                            echo "WARNING - xs-security.json not found"
+
+                            echo "Continuing because it is optional"
+
+                        fi
+
+
+                        # ------------------------------------------------
+                        # MTA validation
+                        # ------------------------------------------------
+
+                        echo ""
+                        echo "Validating mta.yaml..."
+
+                        MTA_ID=$(yq '.ID' "${MTA_FILE}")
+
+                        if [ -z "$MTA_ID" ] || [ "$MTA_ID" = "null" ]; then
+
+                            echo "ERROR: Invalid MTA ID"
+
+                            exit 1
+
+                        fi
+
+                        echo "MTA ID: $MTA_ID"
+
+
+                        MTA_VERSION=$(yq '.version' "${MTA_FILE}")
+
+                        echo "MTA version: $MTA_VERSION"
+
+
+                        # ------------------------------------------------
+                        # package.json validation
+                        # ------------------------------------------------
+
+                        echo ""
+                        echo "Validating package.json..."
+
+                        PACKAGE_NAME=$(jq -r '.name' package.json)
+
+                        if [ "$PACKAGE_NAME" = "null" ]; then
+
+                            echo "ERROR: package.json name not found"
+
+                            exit 1
+
+                        fi
+
+                        echo "Package name: $PACKAGE_NAME"
+
+
+                        # ------------------------------------------------
+                        # CDS validation
+                        # ------------------------------------------------
+
+                        echo ""
+                        echo "Checking CDS project..."
+
+                        cds env
+
+
+                        echo ""
+                        echo "================================================="
+                        echo "CAP project validation completed successfully"
+                        echo "================================================="
+
+                    '''
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                withCredentials([
+
+                    string(
+
+                        credentialsId: 'gh-token-q8',
+                        variable: 'GITHUB_TOKEN'
+                    )
                 ]) {
 
-                  sh '''
-					          set -e
+                dir("${PROJECT_DIR}") {
+                    sh '''
+                        set -e
 
-					          echo "Installing semantic-release"
+                        if [ -f package-lock.json ]; then
 
-					          npm install --no-save \
-					            semantic-release \
-					            @semantic-release/commit-analyzer \
-					            @semantic-release/release-notes-generator \
-					            @semantic-release/git
+                            echo "package-lock.json found"
+                            npm ci --legacy-peer-deps
 
-					          echo "Running semantic-release dry-run"
+                        else
 
-					          npx semantic-release \
-                      --branches main \
-                      --tag-format 'cap-v${version}' \
-                      --no-ci \
-                      --plugins \
-                        @semantic-release/commit-analyzer \
-                        @semantic-release/release-notes-generator \
-                        @semantic-release/git \
-                      > semantic.log 2>&1 || true
+                            echo "package-lock.json not found"
+                            echo "Generating package-lock.json..."
 
-                    cat semantic.log
+                            npm install --legacy-peer-deps
 
-                    if grep -q "no new version is released" semantic.log; then
-                      echo "NO_RELEASE=true" > version.env
-                      echo "VERSION=" >> version.env
-                      echo "No new release"
-                    else
-                      VERSION=$(grep 'next release version is' semantic.log | grep -Eo '[0-9]+[.][0-9]+[.][0-9]+')
+                            if [ ! -f package-lock.json ]; then
+                                echo "ERROR: package-lock.json generation failed"
+                                exit 1
+                            fi
 
-                      if [ -z "$VERSION" ]; then
-                        echo "ERROR: Unable to detect version"
-                        exit 1
-                      fi
+                            git add package-lock.json
+                            git config user.name "Jenkins"
+                            git config user.email "jenkins@your-company.com"
+                            git commit -m "chore: generate package-lock.json"
+                            git push origin HEAD:${BRANCH_NAME}
 
-                      echo "VERSION=$VERSION" > version.env
-                      echo "NO_RELEASE=false" >> version.env
-                      echo "Next version: $VERSION"
-                    fi
-				          '''
+                fi
+            '''
+        }
+    }
+  }
+}
+
+        // ========================================================
+        // SEMANTIC RELEASE
+        // ========================================================
+
+        stage('Semantic Release') {
+
+            steps {
+
+                withCredentials([
+
+                    string(
+
+                        credentialsId: 'gh-token-q8',
+
+                        variable: 'GITHUB_TOKEN'
+                    )
+                ]) {
+
+                    dir("${PROJECT_DIR}") {
+
+                        sh '''
+
+                            set -e
+
+                            echo "================================================="
+                            echo "Semantic Release"
+                            echo "================================================="
+
+
+                            semantic-release --dry-run --branches main > semantic.log 2>&1 || true
+
+
+                            cat semantic.log
+
+
+                            if grep -qi "no new version is released" semantic.log; then
+
+
+                                echo "NO_RELEASE=true" > version.env
+
+                                echo "VERSION=" >> version.env
+
+
+                                echo ""
+
+                                echo "No new release detected"
+
+
+                            else
+
+
+                                VERSION=$(grep -i "next release version is" semantic.log \
+                                    | grep -Eo "[0-9]+\\.[0-9]+\\.[0-9]+")
+
+
+                                if [ -z "$VERSION" ]; then
+
+                                    echo "ERROR: Unable to detect next version"
+
+                                    cat semantic.log
+
+                                    exit 1
+
+                                fi
+
+
+                                echo "NO_RELEASE=false" > version.env
+
+                                echo "VERSION=$VERSION" >> version.env
+
+
+                                echo ""
+
+                                echo "Next version: $VERSION"
+
+                            fi
+
+
+                            echo ""
+
+                            echo "Generated version.env"
+
+                            cat version.env
+
+                        '''
+
+
+                        script {
+
+                            def props = readProperties file: 'version.env'
+
+
+                            env.NO_RELEASE = props.NO_RELEASE ?: 'false'
+
+                            env.VERSION = props.VERSION ?: ''
+
+
+                            echo "NO_RELEASE = ${env.NO_RELEASE}"
+
+                            echo "VERSION    = ${env.VERSION}"
+                        }
+                    }
                 }
-              }
             }
-          }
-
-          stash(
-            name: 'version',
-            includes: "${env.REPOSITORY_NAME}/version.env"
-          )
         }
-      }
-    }
 
-    stage('Load Version') {
+        stage('Update MTA Version') {
 
-      agent any
+            when {
+                expression {
+                    env.NO_RELEASE != 'true'
+                }
+            }
 
-      steps {
+            steps {
 
-        unstash 'version'
+                dir("${PROJECT_DIR}") {
 
-        script {
-          def props = readProperties file: "${env.REPOSITORY_NAME}/version.env"
+                    withEnv([
+                        "VERSION=${env.VERSION}"
+                    ]) {
 
-          env.NO_RELEASE = props.NO_RELEASE
-          env.VERSION    = props.VERSION
+                        sh '''
+                            set -e
 
-          echo "Loaded VERSION = ${env.VERSION}"
-          echo "Loaded NO_RELEASE = ${env.NO_RELEASE}"
+                            echo "================================================="
+                            echo "Update MTA Version"
+                            echo "================================================="
+
+                            if [ -z "$VERSION" ]; then
+                                echo "ERROR: VERSION is empty"
+                                exit 1
+                            fi
+
+                            echo "Updating mta.yaml to version $VERSION"
+
+                            yq -i '.version = strenv(VERSION)' mta.yaml
+
+                            echo ""
+                            echo "Updated mta.yaml:"
+                            yq '.version' mta.yaml
+
+                            echo ""
+                            echo "Git status:"
+                            git status
+                        '''
+                    }
+                }
+            }
         }
-      }
-    }
 
-    stage('Release Gate') {
+        // ========================================================
+        // CDS BUILD
+        // ========================================================
 
-      agent any
+        stage('CDS Build') {
 
-      steps {
-        unstash 'version'
+            steps {
 
-        script {
-          def props = readProperties file: "${env.REPOSITORY_NAME}/version.env"
-          env.NO_RELEASE = props.NO_RELEASE
-          env.VERSION    = props.VERSION
+                dir("${PROJECT_DIR}") {
 
-          echo "Loaded VERSION = ${env.VERSION}"
-          echo "Loaded NO_RELEASE = ${env.NO_RELEASE}"
+                    sh '''
+                        set -e
 
-          if (env.NO_RELEASE == "true") {
-            echo "No release detected → stopping pipeline"
-            
-            currentBuild.result = 'UNSTABLE'
-            return
-          } else {
-            echo "Release detected → continuing pipeline"
-          }
+                        echo "================================================="
+                        echo "CDS Build"
+                        echo "================================================="
+
+                        rm -rf gen
+
+                        echo "Installed CDS version:"
+
+                        npx cds --version
+
+                        echo ""
+                        echo "Running CDS build..."
+
+                        npx cds build
+
+                        echo "=== gen/srv ==="
+                        find gen/srv -maxdepth 2 -type f | sort
+
+                        echo "=== gen/db ==="
+                        find gen/db -maxdepth 2 -type f | sort
+
+                        echo "=== srv package files ==="
+                        ls -la gen/srv/package*.json
+
+                        echo ""
+                        echo "CDS build completed successfully"
+                    '''
+                }
+            }
         }
-      }
-    }
 
-    /* =========================================================
-     * INSTALL
-     * ========================================================= */
-    stage('Install Dependencies') {
+        // ========================================================
+        // BUILD MTAR
+        // ========================================================
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
-          serviceAccount: 'jenkins'
-        ))
-      }
+        stage('Build MTAR') {
 
-      steps {
+            when {
 
-        container('sap-btp') {
+                expression {
 
-          unstash 'source'
+                    env.NO_RELEASE != 'true'
+                }
+            }
 
-          dir("${env.REPOSITORY_NAME}/cap") {
+            steps {
 
-            sh '''
-              set -e
+                dir("${PROJECT_DIR}") {
 
-              echo "Root install"
-              npm install --legacy-peer-deps
+                    sh '''
 
-              echo "App install"
-              [ -f app/package.json ] && (cd app && npm install) || true
+                        set -e
 
-              echo "Srv install"
-              [ -f srv/package.json ] && (cd srv && npm install) || true
+                        echo "================================================="
+                        echo "Build MTAR"
+                        echo "================================================="
 
-              echo "DB install"
-              [ -f db/package.json ] && (cd db && npm install) || true
 
-              echo "Dedupe"
-              npm dedupe || true
-            '''
-          }
+                        rm -rf gen
 
-          stash(
-            name: 'installed-source',
-            includes: '**',
-            useDefaultExcludes: false
-          )
+                        rm -rf "${MTAR_DIR}"
+
+
+                        echo "Running MBT build..."
+
+                        mbt build -p cf -t "${MTAR_DIR}"
+
+
+                        echo ""
+
+                        echo "Generated artifacts:"
+
+                        ls -lah "${MTAR_DIR}"
+
+
+                        MTAR=$(
+
+                            find "${MTAR_DIR}" -name "*.mtar" | head -n 1)
+
+
+                        if [ -z "$MTAR" ]; then
+
+                            echo "ERROR: MTAR was not generated"
+
+                            exit 1
+
+                        fi
+
+
+                        echo ""
+
+                        echo "MTAR generated successfully:"
+
+                        echo "$MTAR"
+
+                    '''
+                }
+            }
         }
-      }
-    }
 
-    /* =========================================================
-     * UPDATE VERSION
-     * ========================================================= */
-    stage('Update Version Files') {
+        // ========================================================
+        // PUBLISH NEXUS
+        // ========================================================
 
-      when {
-        expression { env.NO_RELEASE != "true" }
-      }
+        stage('Publish Nexus') {
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
-          serviceAccount: 'jenkins'
-        ))
-      }
+            when {
 
-      steps {
+                expression {
 
-        container('sap-btp') {
+                    env.NO_RELEASE != 'true'
+                }
+            }
 
-          unstash 'installed-source'
+            steps {
 
-          dir("${env.REPOSITORY_NAME}") {
+                echo "Nexus publication placeholder"
 
-            sh '''
-              set -e
+                echo "NEXUS_URL  = ${env.NEXUS_URL}"
 
-              echo "Updating version to $VERSION"
-
-              MTA_FILE="cap/mta.yaml"
-
-              # =========================
-              # Aggiorna mta.yaml
-              # =========================
-              if grep -q "^version:" "$MTA_FILE"; then
-                sed -i "s/^version:.*/version: $VERSION/" "$MTA_FILE"
-              else
-                echo "version: $VERSION" >> "$MTA_FILE"
-              fi
-
-              echo "Updated $MTA_FILE"
-              cat "$MTA_FILE"
-
-              # =========================
-              # Aggiorna package.json e package-lock.json
-              # =========================
-              cd cap
-
-              npm version "$VERSION" --no-git-tag-version
-
-              echo "===== package.json ====="
-              cat package.json
-
-              echo "===== package-lock.json ====="
-              cat package-lock.json
-            '''
-          }
-
-          stash(
-            name: 'updated-source',
-            includes: '**',
-            useDefaultExcludes: false
-          )
+                echo "NEXUS_REPO = ${env.NEXUS_REPO}"
+            }
         }
-      }
-    }
 
-    /* =========================================================
-     * CLEAN
-     * ========================================================= */
-    stage('Clean Workspace') {
+        // ========================================================
+        // DEPLOY
+        // ========================================================
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
-          serviceAccount: 'jenkins'
-        ))
-      }
+        stage('Deploy') {
 
-      steps {
+            when {
 
-        container('sap-btp') {
+                expression {
 
-          unstash 'updated-source'
+                    env.NO_RELEASE != 'true'
+                }
+            }
 
-          dir("${env.REPOSITORY_NAME}/cap") {
+            steps {
 
-            sh '''
-              set -e
+                withCredentials([
 
-              rm -rf gen
-              rm -rf mta_archives
-              rm -rf node_modules
-              rm -rf kupit-flexiblewf-cap-* || true
-            '''
-          }
+                    usernamePassword(
 
-          stash(
-            name: 'clean-source',
-            includes: '**',
-            useDefaultExcludes: false
-          )
+                        credentialsId: 'cf-btp-trial',
+
+                        usernameVariable: 'CF_USER',
+
+                        passwordVariable: 'CF_PASSWORD'
+                    )
+                ]) {
+
+                    dir("${PROJECT_DIR}") {
+
+                        sh '''
+
+                            set -e
+
+                            echo "================================================="
+                            echo "Deploy to SAP BTP"
+                            echo "================================================="
+
+
+                            MTAR=$(find "${MTAR_DIR}" -name "*.mtar" | head -n 1)
+
+
+                            if [ -z "$MTAR" ]; then
+
+                                echo "ERROR: MTAR not found"
+
+                                exit 1
+
+                            fi
+
+
+                            echo "MTAR: $MTAR"
+
+
+                            echo ""
+
+                            echo "CF API: $CF_API"
+
+                            echo "CF ORG: $CF_ORG"
+
+                            echo "CF SPACE: $CF_SPACE"
+
+
+                            cf api "$CF_API"
+
+
+                            cf auth "$CF_USER" "$CF_PASSWORD"
+
+
+                            cf target -o "$CF_ORG" -s "$CF_SPACE"
+
+
+                            echo ""
+
+                            echo "Deploying MTAR..."
+
+
+                            cf deploy "$MTAR" -f
+
+
+                            echo ""
+
+                            echo "Deployment completed successfully"
+
+                        '''
+                    }
+                }
+            }
         }
-      }
-    }
 
-    /* =========================================================
-     * BUILD MTA
-     * ========================================================= */
-    stage('Build MTA') {
+        stage('Commit & Tag Release') {
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
-          serviceAccount: 'jenkins'
-        ))
-      }
+            when {
+                expression {
+                    env.NO_RELEASE != 'true'
+                }
+            }
 
-      steps {
+            steps {
 
-        container('sap-btp') {
+                withCredentials([
+                    string(
+                        credentialsId: 'gh-token-q8',
+                        variable: 'GITHUB_TOKEN'
+                    )
+                ]) {
 
-          unstash 'clean-source'
+                    dir("${PROJECT_DIR}") {
 
-          dir("${env.REPOSITORY_NAME}/cap") {
+                        sh '''
+                            set -e
 
-            sh '''
-              set -e
+                            echo "================================================="
+                            echo "Commit & Tag Release"
+                            echo "================================================="
 
-              node -v
-              npm -v
-              cds --version
-              mbt --version
+                            if [ -z "$VERSION" ]; then
+                                echo "ERROR: VERSION is empty"
+                                exit 1
+                            fi
 
-              rm -rf gen mta_archives
+                            echo "Release version: $VERSION"
 
-              echo "Building CAP project"
 
-              npx cds build
+                            echo ""
+                            echo "Configuring Git identity..."
 
-              echo "Installing production deps"
+                            git config user.email "ci@jenkins"
+                            git config user.name "Jenkins CI"
 
-              cd gen/srv
-              npm install --omit=dev
 
-              cd ../../
+                            echo ""
+                            echo "Updating package.json and package-lock.json..."
 
-              echo "Building MTAR"
+                            npm version "$VERSION" --no-git-tag-version
 
-              mbt build -p cf -t mta_archives
 
-              echo "Generated MTAR"
+                            echo ""
+                            echo "Updating mta.yaml..."
 
-              ls -lah mta_archives
-            '''
-          }
+                            yq -i '.version = strenv(VERSION)' mta.yaml
 
-          stash(
-            name: 'mtar',
-            includes: "${env.REPOSITORY_NAME}/cap/mta_archives/*.mtar",
-            useDefaultExcludes: false
-          )
-        }
-      }
-    }
 
-    /* =========================================================
-	 * PUBLISH MTAR TO NEXUS
-     * ========================================================= */
-	stage('Publish MTAR to Nexus') {
+                            echo ""
+                            echo "Verifying versions..."
 
-		agent {
-			kubernetes(k8sAgent(
-			cloud: 'kubernetes',
-			podTemplate: 'sap-btp',
-			serviceAccount: 'jenkins'
-			))
-		}
+                            PACKAGE_VERSION=$(jq -r '.version' package.json)
+                            PACKAGE_LOCK_VERSION=$(jq -r '.version' package-lock.json)
+                            MTA_VERSION=$(yq -r '.version' mta.yaml)
 
-		steps {
+                            echo "package.json version: $PACKAGE_VERSION"
+                            echo "package-lock.json version: $PACKAGE_LOCK_VERSION"
+                            echo "mta.yaml version:     $MTA_VERSION"
 
-			container('sap-btp') {
 
-			unstash 'mtar'
-			unstash 'version'
-			
-			withAwsSecret([
-			  secret_id: "SM-AUT-PLAT-PROD-NEXUS-SAP-BTP-CREDENTIALS".toUpperCase(),
-			  type: "keyvalue"
-			]) {
-			
-			  script {
-				
-				def nexusToken = env.token
+                            if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+                                echo "ERROR: package.json version mismatch"
+                                exit 1
+                            fi
 
-        withEnv([
-						"NEXUS_TOKEN_B64=${nexusToken}"
-					]) {
+                            if [ "$PACKAGE_LOCK_VERSION" != "$VERSION" ]; then
+                                echo "ERROR: package-lock.json version mismatch"
+                                exit 1
+                            fi
 
-				dir("${env.REPOSITORY_NAME}/cap") {
+                            if [ "$MTA_VERSION" != "$VERSION" ]; then
+                                echo "ERROR: mta.yaml version mismatch"
+                                exit 1
+                            fi
 
-					sh '''
-						set -e					
 
-					  VERSION=$(grep '^VERSION=' ../version.env | cut -d '=' -f2)
+                            echo ""
+                            echo "Git status..."
 
-					  MTAR_FILE=$(ls mta_archives/*.mtar | head -n 1)
+                            git status
 
-					  MTAR_NAME=$(basename "$MTAR_FILE")
 
-					  echo "================================================="
-					  echo "Upload MTAR to Nexus"
-					  echo "================================================="
+                            echo ""
+                            echo "Commit..."
 
-					  echo "Artifact: $MTAR_NAME"
-					  echo "Version : $VERSION"
+                            git add package.json package-lock.json mta.yaml
 
-					  HTTP_CODE=$(curl \
-					  --insecure \
-					  -H "Authorization: Basic ${NEXUS_TOKEN_B64}" \
-					  -H "Content-Type: application/octet-stream" \
-					  --upload-file "$MTAR_FILE" \
-					  -w "%{http_code}" \
-					  -o /dev/null \
-					  "${NEXUS_URL}/repository/${NEXUS_REPO}/${VERSION}/${MTAR_NAME}")
+                            git commit \
+                                -m "chore(release): $VERSION [skip ci]" \
+                                || echo "No changes to commit"
 
-				    echo "HTTP CODE: $HTTP_CODE"
 
-				    if [ "$HTTP_CODE" != "201" ]; then
-					    echo "ERROR: Upload failed"
-					    exit 1
-				    fi
+                            echo ""
+                            echo "Create tag..."
 
-				    echo "Upload completed successfully"
-			    '''
-        }  
-      }  
-	  }
-	 }
-  }
- }
+                            git tag -f "v$VERSION"
+
+
+                            echo ""
+                            echo "Push branch..."
+
+                            git push origin HEAD:main
+
+
+                            echo ""
+                            echo "Push tag..."
+
+                            git push origin "v$VERSION" --force
+
+
+                            echo ""
+                            echo "================================================="
+                            echo "Release completed successfully"
+                            echo "Version: $VERSION"
+                            echo "================================================="
+                        '''
+                    }
+                }
+            }
+        }        
 }
 
-    /* =========================================================
-     * DEPLOY
-     * ========================================================= */
-    stage('Deploy') {
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'sap-btp',
-          serviceAccount: 'jenkins'
-        ))
-      }
+    // ============================================================
+    // POST ACTIONS
+    // ============================================================
 
-      steps {
+    post {
 
-        container('sap-btp') {
+        success {
 
-          unstash 'updated-source'
-          unstash 'mtar'
+            echo '''
 
-          withAwsSecret([
-            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-DEPLOY-CREDENTIALS".toUpperCase(),
-            type: "keyvalue"
-          ]) {
-            
-            script {
+            =================================================
+            CAP PIPELINE COMPLETED SUCCESSFULLY
+            =================================================
 
-              def btpUser = env.username
-              def btpPassword = env.password
-
-              withEnv([
-                "CF_USER=${btpUser}",
-                "CF_PASSWORD=${btpPassword}"
-              ]) {
-
-            dir("${env.REPOSITORY_NAME}/cap") {
-
-              sh '''
-                set -e
-
-                cf version
-
-                cf install-plugin -f multiapps || true
-
-                MTAR=$(ls mta_archives/*.mtar | head -n 1)
-
-                cf login \
-                  -a "$CF_API" \
-                  -u "$CF_USER" \
-                  -p "$CF_PASSWORD" \
-                  -o "$CF_ORG" \
-                  -s "$CF_SPACE"
-
-                cf deploy "$MTAR" -f
-              '''
-            }
-          }
+            '''
         }
-      }
-    }
-   }
- }
 
-     /* =========================================================
-     * COMMIT & TAG
-     * ========================================================= */
-    stage('Commit & Tag') {
 
-      agent {
-        kubernetes(k8sAgent(
-          cloud: 'kubernetes',
-          podTemplate: 'gh',
-          serviceAccount: 'jenkins'
-        ))
-      }
+        unstable {
 
-      steps {
+            echo '''
 
-        container('gh') {
+            =================================================
+            CAP PIPELINE COMPLETED WITHOUT NEW RELEASE
+            =================================================
 
-          unstash 'updated-source'
-          unstash 'version'
-
-          withAwsSecret([
-            secret_id: "SM-AUT-PLAT-PROD-SAP-BTP-GH-TOKEN".toUpperCase(),
-            type: "keyvalue"
-          ]) {
-
-            script {
-
-              def githubToken = env.token
-              withEnv(["GITHUB_TOKEN=${githubToken}"]) {
-
-              sh '''
-      set -e
-
-    NO_RELEASE=$(grep 'NO_RELEASE=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
-
-    if [ "$NO_RELEASE" = "true" ]; then
-      echo "Skipping commit & tag"
-      exit 0
-    fi
-
-    VERSION=$(grep 'VERSION=' ${WORKSPACE}/${REPOSITORY_NAME}/version.env | cut -d '=' -f2)
-
-    if [ -z "$VERSION" ]; then
-      echo "ERROR: VERSION is empty"
-      exit 1
-    fi
-
-    echo "Using VERSION: $VERSION"
-
-    TARGET_REPO="sap-btp-wflibero2-cap-cicd"
-    TARGET_DIR="/tmp/$TARGET_REPO"
-
-    echo "Target dir: \$TARGET_DIR"
-
-    git config --global user.email "ci@jenkins"
-    git config --global user.name "Jenkins CI"
-
-    echo "Cloning repo..."
-
-    rm -rf "$TARGET_DIR"
-
-    git clone https://x-access-token:$GITHUB_TOKEN@github.com/KPICorporate/$TARGET_REPO.git "\$TARGET_DIR"
-
-    if [ ! -d "\$TARGET_DIR/.git" ]; then
-      echo "ERROR: clone failed"
-      exit 1
-    fi
-    cd "$TARGET_DIR"
-    
-    echo "Copy files"
-
-    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/mta.yaml mta.yaml
-    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package.json package.json
-    cp -f ${WORKSPACE}/${REPOSITORY_NAME}/cap/package-lock.json package-lock.json
-
-    git add mta.yaml package.json package-lock.json
-
-    if git diff --cached --quiet; then
-      echo "No changes to commit"
-    else
-      git commit -m "chore(release): $VERSION [skip ci]"
-      git push origin main
-    fi
-
-    git tag -f "v$VERSION"
-    
-    git push origin main
-    git push origin "v$VERSION" --force
-  '''
-            }
-          }
+            '''
         }
-      }
+
+
+        failure {
+
+            echo '''
+
+            =================================================
+            CAP PIPELINE FAILED
+            =================================================
+
+            '''
+        }
+
+
+        always {
+
+            cleanWs()
+        }
     }
-  }
- }
 }
- 
