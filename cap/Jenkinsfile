@@ -438,148 +438,182 @@ pipeline {
 }
 
 
-        // ========================================================
-        // SEMANTIC RELEASE
-        // ========================================================
+// ========================================================
+// SEMANTIC RELEASE
+// ========================================================
 
-        stage('Semantic Release') {
+stage('Semantic Release') {
 
-            steps {
+    steps {
 
-                withCredentials([
+        withCredentials([
+            string(
+                credentialsId: 'gh-token-q8',
+                variable: 'GITHUB_TOKEN'
+            )
+        ]) {
 
-                    string(
+            dir("${PROJECT_DIR}") {
 
-                        credentialsId: 'gh-token-q8',
-
-                        variable: 'GITHUB_TOKEN'
-                    )
+                withEnv([
+                    "BRANCH_NAME=${APPLICATION_BRANCH}",
+                    "GIT_BRANCH=origin/${APPLICATION_BRANCH}",
+                    "CHANGE_BRANCH="
                 ]) {
 
-                    dir("${PROJECT_DIR}") {
+                    sh '''
 
-                        sh '''
+                        set -e
 
-                            set -e
+                        echo "================================================="
+                        echo "Semantic Release"
+                        echo "================================================="
 
-                            echo "================================================="
-                            echo "Semantic Release"
-                            echo "================================================="
+                        echo ""
+                        echo "Application repository:"
+                        echo "$APPLICATION_REPOSITORY"
+
+                        echo ""
+                        echo "Application branch:"
+                        echo "$APPLICATION_BRANCH"
+
+                        echo ""
+                        echo "================================================="
+                        echo "SEMANTIC RELEASE CONTEXT"
+                        echo "================================================="
+
+                        echo ""
+                        echo "Jenkins/Semantic BRANCH_NAME:"
+                        echo "$BRANCH_NAME"
+
+                        echo ""
+                        echo "GIT_BRANCH:"
+                        echo "${GIT_BRANCH:-<unset>}"
+
+                        echo ""
+                        echo "CHANGE_BRANCH:"
+                        echo "${CHANGE_BRANCH:-<unset>}"
+
+                        echo ""
+                        echo "Actual Git branch:"
+                        git branch --show-current
+
+                        echo ""
+                        echo "Git status:"
+                        git status --short
+
+                        echo ""
+                        echo "Git remote:"
+                        git remote -v
+
+                        echo ""
+                        echo "Git HEAD:"
+                        git rev-parse HEAD
+
+                        echo ""
+                        echo "package.json:"
+                        jq '.name, .version' package.json
+
+                        echo ""
+                        echo "Semantic release configuration:"
+                        jq '.release // empty' package.json
+
+                        echo ""
+                        echo "================================================="
+                        echo "Running semantic-release"
+                        echo "================================================="
+
+                        semantic-release \
+                            --dry-run \
+                            > semantic.log 2>&1
+
+                        SEMANTIC_EXIT_CODE=$?
+
+                        echo ""
+                        echo "Semantic-release output:"
+                        cat semantic.log
+
+                        echo ""
+                        echo "Semantic-release exit code:"
+                        echo "$SEMANTIC_EXIT_CODE"
 
 
-                            echo "Application repository: $APPLICATION_REPOSITORY"
-                            echo "Application branch:     $APPLICATION_BRANCH"
+                        # =================================================
+                        # NO RELEASE
+                        # =================================================
 
-                            echo "================================================="
-                            echo "SEMANTIC RELEASE CONTEXT"
-                            echo "================================================="
+                        if grep -qi "no new version is released" semantic.log; then
 
-                            echo "Jenkins BRANCH_NAME:"
-                            echo "${BRANCH_NAME:-<unset>}"
+                            echo "NO_RELEASE=true" > version.env
+                            echo "VERSION=" >> version.env
 
                             echo ""
-                            echo "Application branch:"
-                            echo "$APPLICATION_BRANCH"
+                            echo "No new release detected"
 
-                            echo ""
-                            echo "Git branch:"
-                            git branch --show-current
 
-                            echo ""
-                            echo "Git status:"  
-                            git status --short
+                        # =================================================
+                        # RELEASE DETECTED
+                        # =================================================
 
-                            echo ""
-                            echo "Git remote:"
-                            git remote -v
+                        elif grep -qi "next release version is" semantic.log; then
 
-                            echo ""
-                            echo "Git HEAD:"
-                            git rev-parse HEAD
+                            VERSION=$(
+                                grep -i "next release version is" semantic.log |
+                                grep -Eo '[0-9]+\\.[0-9]+\\.[0-9]+' |
+                                head -n 1
+                            )
 
-                            echo ""
-                            echo "package.json:"    
-                            jq '.name, .version' package.json
+                            if [ -z "$VERSION" ]; then
 
-                            echo ""
-                            echo "Semantic release configuration:"
-                            jq '.release // empty' package.json
-
-                            echo ""
-                            echo "Running semantic-release..."
-
-                            
-                               
-                            semantic-release \
-                                --dry-run \
-                                --branches "$APPLICATION_BRANCH" \
-                                > semantic.log 2>&1
-
-                            SEMANTIC_EXIT_CODE=$?
-
-                            cat semantic.log
-
-                            if grep -qi "no new version is released" semantic.log; then
-
-                                echo "NO_RELEASE=true" > version.env
-                                echo "VERSION=" >> version.env
-
-                                echo "No new release detected"
-
-                            elif grep -qi "next release version is" semantic.log; then
-
-                                VERSION=$(
-	                                grep -i "next release version is" semantic.log |
-	                                grep -Eo '[0-9.]{5,}' |
-	                                head -n 1
-                                )
-
-                                if [ -z "$VERSION" ]; then
-                                    echo "ERROR: Release detected but version could not be determined"
-                                    exit 1
-                                fi
-
-                                echo "NO_RELEASE=false" > version.env
-                                echo "VERSION=$VERSION" >> version.env
-
-                                echo "Next version: $VERSION"
-
-                            else
-
-                                echo "ERROR: semantic-release did not produce an expected result"
-                                echo "semantic-release exit code: $SEMANTIC_EXIT_CODE"
+                                echo "ERROR: Release detected but version could not be determined"
 
                                 exit 1
 
                             fi
 
+                            echo "NO_RELEASE=false" > version.env
+                            echo "VERSION=$VERSION" >> version.env
 
                             echo ""
-
-                            echo "Generated version.env"
-
-                            cat version.env
-
-                       '''
+                            echo "Next version:"
+                            echo "$VERSION"
 
 
-                        script {
+                        # =================================================
+                        # UNEXPECTED RESULT
+                        # =================================================
 
-                            def props = readProperties file: 'version.env'
+                        else
+
+                            echo ""
+                            echo "ERROR: semantic-release did not produce an expected result"
+                            echo "semantic-release exit code: $SEMANTIC_EXIT_CODE"
+
+                            exit 1
+
+                        fi
 
 
-                            env.NO_RELEASE = props.NO_RELEASE ?: 'false'
+                        echo ""
+                        echo "Generated version.env:"
+                        cat version.env
 
-                            env.VERSION = props.VERSION ?: ''
+                    '''
 
+                    script {
 
-                            echo "NO_RELEASE = ${env.NO_RELEASE}"
+                        def props = readProperties file: 'version.env'
 
-                            echo "VERSION    = ${env.VERSION}"
+                        env.NO_RELEASE = props.NO_RELEASE ?: 'false'
+                        env.VERSION = props.VERSION ?: ''
+
+                        echo "NO_RELEASE = ${env.NO_RELEASE}"
+                        echo "VERSION    = ${env.VERSION}"
                         }
                     }
                 }
-            }
+             }
+          }
         }
 
         stage('Update MTA Version') {
