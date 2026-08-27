@@ -526,8 +526,7 @@ pipeline {
 
                             elif grep -qi "next release version is" semantic.log; then
 
-                                VERSION=$(grep -i "next release version is" semantic.log | grep -Eo '[0-9]+\.
-                                [0-9]+\.[0-9]+' | head -n 1)
+                                VERSION=$(grep -i "next release version is" semantic.log | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
 
                                 if [ -z "$VERSION" ]; then
                                     echo "ERROR: Release detected but version could not be determined"
