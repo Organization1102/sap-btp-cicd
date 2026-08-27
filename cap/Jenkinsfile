@@ -470,48 +470,48 @@ pipeline {
                             echo "Application repository: $APPLICATION_REPOSITORY"
                             echo "Application branch:     $APPLICATION_BRANCH"
 
-        echo "================================================="
-        echo "GIT CONTEXT CHECK"
-        echo "================================================="
+                            echo "================================================="
+                            echo "GIT CONTEXT CHECK"
+                            echo "================================================="
 
-        echo "PWD:"
-        pwd
+                            echo "PWD:"
+                            pwd
 
-        echo ""
-        echo "Git root:"
-        git rev-parse --show-toplevel
+                            echo ""
+                            echo "Git root:"
+                            git rev-parse --show-toplevel
 
-        echo ""
-        echo "Remote:"
-        git remote -v
+                            echo ""
+                            echo "Remote:"
+                            git remote -v
 
-        echo ""
-        echo "Current branch:"
-        git branch --show-current
+                            echo ""
+                            echo "Current branch:"
+                            git branch --show-current
 
-        echo ""
-        echo "HEAD:"
-        git rev-parse HEAD
+                            echo ""
+                            echo "HEAD:"
+                            git rev-parse HEAD
 
-        echo ""
-        echo "Branches:"
-        git branch -a
+                            echo ""
+                            echo "Branches:"
+                            git branch -a
 
-        echo ""
-        echo "Application repository:"
-        echo "$APPLICATION_REPOSITORY"
+                            echo ""
+                            echo "Application repository:"
+                            echo "$APPLICATION_REPOSITORY"
 
-        echo ""
-        echo "Application branch:"
-        echo "$APPLICATION_BRANCH"
+                            echo ""
+                            echo "Application branch:"
+                            echo "$APPLICATION_BRANCH"
 
-        echo ""
-        echo "Running semantic-release..."
+                            echo ""
+                            echo "Running semantic-release..."
 
-        semantic-release \
-            --dry-run \
-            --branches "$APPLICATION_BRANCH" \
-            > semantic.log 2>&1 || true
+                            semantic-release \
+                                --dry-run \
+                                --branches "$APPLICATION_BRANCH" \
+                                > semantic.log 2>&1
 
                             SEMANTIC_EXIT_CODE=$?
 
@@ -526,9 +526,8 @@ pipeline {
 
                             elif grep -qi "next release version is" semantic.log; then
 
-                                VERSION=$(grep -i "next release version is" semantic.log \
-                                    | grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" \
-                                    | head -n 1)
+                                VERSION=$(grep -i "next release version is" semantic.log | grep -Eo '[0-9]+\.
+                                [0-9]+\.[0-9]+' | head -n 1)
 
                                 if [ -z "$VERSION" ]; then
                                     echo "ERROR: Release detected but version could not be determined"
