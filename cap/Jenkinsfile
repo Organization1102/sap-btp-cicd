@@ -39,6 +39,8 @@ pipeline {
         //REPOSITORY_NAME = 'sap-btp-wflibero2-cap-cicd'
         PIPELINE_REPOSITORY = 'sap-btp-cicd'
 	    APPLICATION_REPOSITORY = 'sap-btp-wflibero2-cap-cicd'
+
+        PIPELINE_BRANCH       = 'feature/rollout-cap'
         APPLICATION_BRANCH = 'main'
 
         // ========================================================
@@ -464,7 +466,13 @@ pipeline {
                             echo "================================================="
 
 
-                            semantic-release --dry-run --branches main > semantic.log 2>&1 || true
+                            echo "Application repository: $APPLICATION_REPOSITORY"
+                            echo "Application branch:     $APPLICATION_BRANCH"
+
+                            semantic-release \
+                                --dry-run \
+                                --branches "$APPLICATION_BRANCH" \
+                                > semantic.log 2>&1 || true
 
 
                             cat semantic.log
