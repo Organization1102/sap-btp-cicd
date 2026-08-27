@@ -509,14 +509,14 @@ pipeline {
                             echo "$APPLICATION_BRANCH"
 
                             echo ""
-                            echo "Running semantic-release..."
-
-                            echo ""
                             echo "Semantic Release Git Context:"
                             echo "BRANCH_NAME=${BRANCH_NAME:-<unset>}"  
                             echo "GIT_BRANCH=${GIT_BRANCH:-<unset>}"
                             echo "CHANGE_BRANCH=${CHANGE_BRANCH:-<unset>}"  
                             echo "Git branch=$(git branch --show-current)"
+
+                            echo ""
+                            echo "Running semantic-release..."
 
                             env \
                                 -u BRANCH_NAME \
