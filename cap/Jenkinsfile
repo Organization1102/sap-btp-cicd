@@ -471,58 +471,49 @@ pipeline {
                             echo "Application branch:     $APPLICATION_BRANCH"
 
                             echo "================================================="
-                            echo "GIT CONTEXT CHECK"
+                            echo "SEMANTIC RELEASE CONTEXT"
                             echo "================================================="
 
-                            echo "PWD:"
-                            pwd
-
-                            echo ""
-                            echo "Git root:"
-                            git rev-parse --show-toplevel
-
-                            echo ""
-                            echo "Remote:"
-                            git remote -v
-
-                            echo ""
-                            echo "Current branch:"
-                            git branch --show-current
-
-                            echo ""
-                            echo "HEAD:"
-                            git rev-parse HEAD
-
-                            echo ""
-                            echo "Branches:"
-                            git branch -a
-
-                            echo ""
-                            echo "Application repository:"
-                            echo "$APPLICATION_REPOSITORY"
+                            echo "Jenkins BRANCH_NAME:"
+                            echo "${BRANCH_NAME:-<unset>}"
 
                             echo ""
                             echo "Application branch:"
                             echo "$APPLICATION_BRANCH"
 
                             echo ""
-                            echo "Semantic Release Git Context:"
-                            echo "BRANCH_NAME=${BRANCH_NAME:-<unset>}"  
-                            echo "GIT_BRANCH=${GIT_BRANCH:-<unset>}"
-                            echo "CHANGE_BRANCH=${CHANGE_BRANCH:-<unset>}"  
-                            echo "Git branch=$(git branch --show-current)"
+                            echo "Git branch:"
+                            git branch --show-current
+
+                            echo ""
+                            echo "Git status:"  
+                            git status --short
+
+                            echo ""
+                            echo "Git remote:"
+                            git remote -v
+
+                            echo ""
+                            echo "Git HEAD:"
+                            git rev-parse HEAD
+
+                            echo ""
+                            echo "package.json:"    
+                            jq '.name, .version' package.json
+
+                            echo ""
+                            echo "Semantic release configuration:"
+                            jq '.release // empty' package.json
 
                             echo ""
                             echo "Running semantic-release..."
 
-                            env \
-                                -u BRANCH_NAME \
-                                -u GIT_BRANCH \
-                                -u CHANGE_BRANCH \
-                                semantic-release \
-                                    --dry-run \
-                                    --branches "$APPLICATION_BRANCH" \
-                                    > semantic.log 2>&1
+                            
+                               
+                            semantic-release \
+                                --dry-run \
+                                --branches "$APPLICATION_BRANCH" \
+                                > semantic.log 2>&1
 
                             SEMANTIC_EXIT_CODE=$?
 
