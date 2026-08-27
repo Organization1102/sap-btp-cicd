@@ -457,7 +457,7 @@ stage('Semantic Release') {
 
                 withEnv([
                     "BRANCH_NAME=${APPLICATION_BRANCH}",
-                    "GIT_BRANCH=origin/${APPLICATION_BRANCH}",
+                    "GIT_BRANCH=${APPLICATION_BRANCH}",
                     "CHANGE_BRANCH="
                 ]) {
 
