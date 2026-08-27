@@ -43,9 +43,6 @@ pipeline {
         //PIPELINE_BRANCH       = 'feature/rollout-cap'
         APPLICATION_BRANCH = 'main'
 
-        echo "Pipeline branch: $BRANCH_NAME"
-        echo "Application branch: $APPLICATION_BRANCH"
-
         // ========================================================
         // NEXUS
         // ========================================================
