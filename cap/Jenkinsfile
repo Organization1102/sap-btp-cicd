@@ -19,7 +19,7 @@ pipeline {
         // PROJECT
         // ========================================================
 
-        PROJECT_DIR = '.'
+        PROJECT_DIR = 'application'
         MTA_FILE = 'mta.yaml'
         MTAR_DIR = 'mta_archives'
 
@@ -36,7 +36,10 @@ pipeline {
         // ========================================================
 
         GH_ORGANIZATION = 'Organization1102'
-        REPOSITORY_NAME = 'sap-btp-wflibero2-cap-cicd'
+        //REPOSITORY_NAME = 'sap-btp-wflibero2-cap-cicd'
+        PIPELINE_REPOSITORY = 'sap-btp-cicd'
+	    APPLICATION_REPOSITORY = 'sap-btp-wflibero2-cap-cicd'
+        APPLICATION_BRANCH = 'main'
 
         // ========================================================
         // NEXUS
@@ -52,11 +55,81 @@ pipeline {
         // CHECKOUT
         // ========================================================
 
-        stage('Checkout') {
+        stage('Checkout Application') {
 
             steps {
 
-                checkout scm
+                withCredentials([
+                    string(
+                        credentialsId: 'gh-token-q8',
+                        variable: 'GITHUB_TOKEN'
+                    )
+                ]) {
+
+                    sh '''
+                        set -e
+
+                        echo "================================================="
+                        echo "Checkout Application Repository"
+                        echo "================================================="
+
+                        echo ""
+                        echo "Pipeline Repository:"
+                        echo "$PIPELINE_REPOSITORY"
+
+                        echo ""
+                        echo "Application Repository:"
+                        echo "$APPLICATION_REPOSITORY"
+
+                        echo ""
+                        echo "Branch:"
+                        echo "$APPLICATION_BRANCH"
+
+                        rm -rf application
+
+                        git clone \
+                            --branch "$APPLICATION_BRANCH" \
+                            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GH_ORGANIZATION}/${APPLICATION_REPOSITORY}.git" \
+                            application
+
+                        cd application
+
+                        echo ""
+                        echo "Application repository checked out"
+
+                        echo ""
+                        echo "Current directory:"
+                        pwd
+
+                        echo ""
+                        echo "Git status:"
+                        git status
+
+                        echo ""
+                        echo "Repository content:"
+                        ls -la
+
+                        echo ""
+                        echo "Checking package.json..."
+
+                        if [ ! -f package.json ]; then
+                            echo "ERROR: package.json not found"
+                            exit 1
+                        fi
+
+                        echo "OK - package.json found"
+
+                        echo ""
+                        echo "Checking mta.yaml..."
+
+                        if [ ! -f mta.yaml ]; then
+                            echo "ERROR: mta.yaml not found"
+                            exit 1
+                        fi
+
+                        echo "OK - mta.yaml found"
+                    '''
+                }
             }
         }
 
