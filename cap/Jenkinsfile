@@ -437,6 +437,7 @@ pipeline {
   }
 }
 
+
         // ========================================================
         // SEMANTIC RELEASE
         // ========================================================
@@ -469,54 +470,82 @@ pipeline {
                             echo "Application repository: $APPLICATION_REPOSITORY"
                             echo "Application branch:     $APPLICATION_BRANCH"
 
-                            semantic-release \
-                                --dry-run \
-                                --branches "$APPLICATION_BRANCH" \
-                                > semantic.log 2>&1 || true
+        echo "================================================="
+        echo "GIT CONTEXT CHECK"
+        echo "================================================="
 
+        echo "PWD:"
+        pwd
+
+        echo ""
+        echo "Git root:"
+        git rev-parse --show-toplevel
+
+        echo ""
+        echo "Remote:"
+        git remote -v
+
+        echo ""
+        echo "Current branch:"
+        git branch --show-current
+
+        echo ""
+        echo "HEAD:"
+        git rev-parse HEAD
+
+        echo ""
+        echo "Branches:"
+        git branch -a
+
+        echo ""
+        echo "Application repository:"
+        echo "$APPLICATION_REPOSITORY"
+
+        echo ""
+        echo "Application branch:"
+        echo "$APPLICATION_BRANCH"
+
+        echo ""
+        echo "Running semantic-release..."
+
+        semantic-release \
+            --dry-run \
+            --branches "$APPLICATION_BRANCH" \
+            > semantic.log 2>&1 || true
+
+                            SEMANTIC_EXIT_CODE=$?
 
                             cat semantic.log
 
-
                             if grep -qi "no new version is released" semantic.log; then
 
-
                                 echo "NO_RELEASE=true" > version.env
-
                                 echo "VERSION=" >> version.env
-
-
-                                echo ""
 
                                 echo "No new release detected"
 
+                            elif grep -qi "next release version is" semantic.log; then
+
+                                VERSION=$(grep -i "next release version is" semantic.log \
+                                    | grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" \
+                                    | head -n 1)
+
+                                if [ -z "$VERSION" ]; then
+                                    echo "ERROR: Release detected but version could not be determined"
+                                    exit 1
+                                fi
+
+                                echo "NO_RELEASE=false" > version.env
+                                echo "VERSION=$VERSION" >> version.env
+
+                                echo "Next version: $VERSION"
 
                             else
 
+                                echo "ERROR: semantic-release did not produce an expected result"
+                                echo "semantic-release exit code: $SEMANTIC_EXIT_CODE"
 
-                                VERSION=$(grep -i "next release version is" semantic.log \
-                                    | grep -Eo "[0-9]+\\.[0-9]+\\.[0-9]+")
-
-
-                                if [ -z "$VERSION" ]; then
-
-                                    echo "ERROR: Unable to detect next version"
-
-                                    cat semantic.log
-
-                                    exit 1
-
-                                fi
-
-
-                                echo "NO_RELEASE=false" > version.env
-
-                                echo "VERSION=$VERSION" >> version.env
-
-
-                                echo ""
-
-                                echo "Next version: $VERSION"
+                                exit 1
 
                             fi
 
