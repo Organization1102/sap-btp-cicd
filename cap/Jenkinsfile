@@ -134,27 +134,42 @@ pipeline {
 					echo ""
 					echo "Resolving application branch..."
 
-					# First try an exact branch match
-					APPLICATION_BRANCH=$(
-						yq -r ".branchStrategy.\"${BRANCH_NAME}\".applicationBranch // empty" \
-						"$CONFIG_FILE"
-					)
+					case "$BRANCH_NAME" in
 
-					# If no exact match exists, try feature/* wildcard
-					if [ -z "$APPLICATION_BRANCH" ]; then
+						main)
 
-						case "$BRANCH_NAME" in
+							APPLICATION_BRANCH=$(
+								yq -r '.branchStrategy.main.applicationBranch' "$CONFIG_FILE"
+							)
 
-							feature/*)
+							;;
 
-								APPLICATION_BRANCH=$(
-									yq -r '.branchStrategy."feature/*".applicationBranch // empty' \
-									"$CONFIG_FILE"
-								)
+						develop)
 
-								;;
+							APPLICATION_BRANCH=$(
+								yq -r '.branchStrategy.develop.applicationBranch' "$CONFIG_FILE"
+							)
 
-						esac
+							;;
+
+						feature/*)
+
+							APPLICATION_BRANCH=$(
+								yq -r '.branchStrategy."feature/*".applicationBranch' "$CONFIG_FILE"
+							)
+
+							;;
+
+						*)
+
+							echo "ERROR: No branch strategy configured for:"
+							echo "$BRANCH_NAME"
+
+							exit 1
+
+							;;
+
+					esac
 
 					fi
 
