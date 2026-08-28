@@ -27,26 +27,11 @@ pipeline {
         MTAR_DIR = 'mta_archives'
 
         // ========================================================
-        // SAP BTP
-        // ========================================================
-
-        CF_API   = 'https://api.cf.us10-001.hana.ondemand.com'
-        CF_ORG   = '3d52b474trial'
-        CF_SPACE = 'dev'
-
-        // ========================================================
         // GITHUB
         // ========================================================
 
         GH_ORGANIZATION = 'Organization1102'
         PIPELINE_REPOSITORY = 'sap-btp-cicd'
-	    
-        // ========================================================
-        // NEXUS
-        // ========================================================
-
-        NEXUS_URL  = 'https://nexus.example'
-        NEXUS_REPO = 'sap-btp-raw-dev-hosted'
     }
 
     stages {
@@ -142,6 +127,10 @@ pipeline {
 								yq -r '.branchStrategy.main.applicationBranch' "$CONFIG_FILE"
 							)
 
+                            ENVIRONMENT=$(
+                                yq -r '.branchStrategy.main.environment' "$CONFIG_FILE"
+                            )
+
 							;;
 
 						develop)
@@ -150,6 +139,10 @@ pipeline {
 								yq -r '.branchStrategy.develop.applicationBranch' "$CONFIG_FILE"
 							)
 
+                            ENVIRONMENT=$(
+                                yq -r '.branchStrategy.develop.environment' "$CONFIG_FILE"
+                            )
+
 							;;
 
 						feature/*)
@@ -157,6 +150,10 @@ pipeline {
 							APPLICATION_BRANCH=$(
 								yq -r '.branchStrategy."feature/*".applicationBranch' "$CONFIG_FILE"
 							)
+
+                            ENVIRONMENT=$(
+                                yq -r '.branchStrategy."feature/*".environment' "$CONFIG_FILE"
+                            )
 
 							;;
 
@@ -170,6 +167,57 @@ pipeline {
 							;;
 
 					esac
+
+                    echo ""
+                    echo "Resolving environment configuration..."
+
+                    if [ -z "$ENVIRONMENT" ] || [ "$ENVIRONMENT" = "null" ]; then
+
+                        echo "ERROR: Environment could not be resolved"
+
+                        exit 1
+
+                    fi
+
+                    CF_API=$(
+                        yq -r ".environment.${ENVIRONMENT}.cf.api" "$CONFIG_FILE"
+                    )
+
+                    CF_ORG=$(
+                        yq -r ".environment.${ENVIRONMENT}.cf.org" "$CONFIG_FILE"
+                    )
+
+                    CF_SPACE=$(
+                        yq -r ".environment.${ENVIRONMENT}.cf.space" "$CONFIG_FILE"
+                    )
+
+                    CF_CREDENTIALS_ID=$(
+                        yq -r ".environment.${ENVIRONMENT}.credentials.cf" "$CONFIG_FILE"
+                    )
+
+                    NEXUS_REPO=$(
+                        yq -r ".environment.${ENVIRONMENT}.nexus.repository" "$CONFIG_FILE"
+                    )
+
+                    if [ -z "$CF_API" ] || [ "$CF_API" = "null" ]; then
+                        echo "ERROR: CF API not configured for environment: $ENVIRONMENT"
+                        exit 1
+                    fi
+
+                    if [ -z "$CF_ORG" ] || [ "$CF_ORG" = "null" ]; then
+                        echo "ERROR: CF ORG not configured for environment: $ENVIRONMENT"
+                        exit 1
+                    fi
+
+                    if [ -z "$CF_SPACE" ] || [ "$CF_SPACE" = "null" ]; then
+                        echo "ERROR: CF SPACE not configured for environment: $ENVIRONMENT"
+                        exit 1
+                    fi
+
+                    if [ -z "$CF_CREDENTIALS_ID" ] || [ "$CF_CREDENTIALS_ID" = "null" ]; then
+                        echo "ERROR: CF credentials not configured for environment: $ENVIRONMENT"
+                        exit 1
+                    fi
 
 					if [ -z "$APPLICATION_REPOSITORY" ] || \
 					[ "$APPLICATION_REPOSITORY" = "null" ]; then
@@ -197,11 +245,30 @@ pipeline {
 					echo "Pipeline branch:        $BRANCH_NAME"
 					echo "Application repository: $APPLICATION_REPOSITORY"
 					echo "Application branch:     $APPLICATION_BRANCH"
+                    echo "Environment:            $ENVIRONMENT"
+
+                    echo "CF API:                 $CF_API"
+                    echo "CF ORG:                 $CF_ORG"
+                    echo "CF SPACE:               $CF_SPACE"
+
+                    echo "CF credentials ID:      $CF_CREDENTIALS_ID"
+
+                    echo "Nexus repository:       $NEXUS_REPO"
 
 					echo ""
 
 					echo "APPLICATION_REPOSITORY=$APPLICATION_REPOSITORY" > branch.env
 					echo "APPLICATION_BRANCH=$APPLICATION_BRANCH" >> branch.env
+
+                    echo "ENVIRONMENT=$ENVIRONMENT" >> branch.env
+
+                    echo "CF_API=$CF_API" >> branch.env
+                    echo "CF_ORG=$CF_ORG" >> branch.env
+                    echo "CF_SPACE=$CF_SPACE" >> branch.env
+
+                    echo "CF_CREDENTIALS_ID=$CF_CREDENTIALS_ID" >> branch.env
+
+                    echo "NEXUS_REPO=$NEXUS_REPO" >> branch.env
 
 				'''
 
@@ -212,8 +279,28 @@ pipeline {
 					env.APPLICATION_REPOSITORY = props.APPLICATION_REPOSITORY
 					env.APPLICATION_BRANCH = props.APPLICATION_BRANCH
 
+                    env.ENVIRONMENT            = props.ENVIRONMENT
+
+                    env.CF_API                 = props.CF_API
+                    env.CF_ORG                 = props.CF_ORG
+                    env.CF_SPACE               = props.CF_SPACE
+
+                    env.CF_CREDENTIALS_ID      = props.CF_CREDENTIALS_ID
+
+                    env.NEXUS_REPO             = props.NEXUS_REPO
+
 					echo "APPLICATION_REPOSITORY = ${env.APPLICATION_REPOSITORY}"
 					echo "APPLICATION_BRANCH     = ${env.APPLICATION_BRANCH}"
+
+                    echo "ENVIRONMENT            = ${env.ENVIRONMENT}"
+
+					echo "CF_API                 = ${env.CF_API}"
+                    echo "CF_ORG                 = ${env.CF_ORG}"
+                    echo "CF_SPACE               = ${env.CF_SPACE}"
+                    
+                    echo "CF_CREDENTIALS_ID      = ${env.CF_CREDENTIALS_ID}"
+
+                    echo "NEXUS_REPO             = ${env.NEXUS_REPO}"
 				}
 			}
 		}
@@ -316,6 +403,13 @@ pipeline {
                     echo "Verify Build Environment"
                     echo "================================================="
 
+                    echo ""
+                    echo "Deployment Environment"
+                    echo "Environment: $ENVIRONMENT"
+                    echo "CF API:      $CF_API"
+                    echo "CF ORG:      $CF_ORG" 
+                    echo "CF SPACE:    $CF_SPACE"
+                    
                     echo ""
                     echo "Java"
                     java -version
@@ -989,7 +1083,7 @@ stage('Semantic Release') {
 
                     usernamePassword(
 
-                        credentialsId: 'cf-btp-trial',
+                        credentialsId: 'env.CF_CREDENTIALS_ID',
 
                         usernameVariable: 'CF_USER',
 
