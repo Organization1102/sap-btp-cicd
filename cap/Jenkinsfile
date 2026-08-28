@@ -171,19 +171,6 @@ pipeline {
 
 					esac
 
-					fi
-
-					if [ -z "$APPLICATION_BRANCH" ]; then
-
-						echo "ERROR: No branch strategy configured for:"
-						echo "$BRANCH_NAME"
-
-						exit 1
-
-					fi
-
-					echo "Resolved application branch: $APPLICATION_BRANCH"
-
 					if [ -z "$APPLICATION_REPOSITORY" ] || \
 					[ "$APPLICATION_REPOSITORY" = "null" ]; then
 
