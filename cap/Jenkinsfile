@@ -1083,7 +1083,7 @@ stage('Semantic Release') {
 
                     usernamePassword(
 
-                        credentialsId: 'env.CF_CREDENTIALS_ID',
+                        credentialsId: '${env.CF_CREDENTIALS_ID}',
 
                         usernameVariable: 'CF_USER',
 
