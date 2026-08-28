@@ -1,0 +1,14 @@
+technology: cap
+
+application:
+  repository: sap-btp-wflibero2-cap-cicd
+
+branchStrategy:
+  main:
+    applicationBranch: main
+
+  develop:
+    applicationBranch: develop
+
+  feature/*:
+    applicationBranch: main
