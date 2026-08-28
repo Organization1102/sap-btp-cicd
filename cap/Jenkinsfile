@@ -1165,8 +1165,14 @@ stage('Semantic Release') {
                             echo ""
                             echo "Push branch..."
 
-                            git push origin HEAD:main
+                            if [ -z "$APPLICATION_BRANCH" ]; then
+                                echo "ERROR: APPLICATION_BRANCH is empty"
+                                exit 1
+                            fi
 
+                            echo "Target branch: $APPLICATION_BRANCH"
+
+                            git push origin "HEAD:${APPLICATION_BRANCH}"
 
                             echo ""
                             echo "Push tag..."
