@@ -20,7 +20,8 @@ pipeline {
         // ========================================================
 
         PROJECT_DIR = 'application'
-        CONFIG_FILE = 'config/cap.yaml'
+        
+		CONFIG_FILE = 'pipeline/config/cap.yaml'
 		
 		MTA_FILE = 'mta.yaml'
         MTAR_DIR = 'mta_archives'
@@ -38,11 +39,8 @@ pipeline {
         // ========================================================
 
         GH_ORGANIZATION = 'Organization1102'
-
         PIPELINE_REPOSITORY = 'sap-btp-cicd'
-	    APPLICATION_REPOSITORY = 'sap-btp-wflibero2-cap-cicd'
-
-
+	    
         // ========================================================
         // NEXUS
         // ========================================================
@@ -52,6 +50,39 @@ pipeline {
     }
 
     stages {
+	
+		stage('Checkout Pipeline') {
+
+			steps {
+	
+				withCredentials([
+					string(
+						credentialsId: 'gh-token-q8',
+						variable: 'GITHUB_TOKEN'
+					)
+				]) {
+
+					sh '''
+						set -e
+
+						echo "================================================="
+						echo "Checkout Pipeline Repository"
+						echo "================================================="
+
+						echo "Repository:"
+						echo "$PIPELINE_REPOSITORY"
+
+						echo "Branch:"
+						echo "$BRANCH_NAME"
+
+						git clone \
+							--branch "$BRANCH_NAME" \
+							"https://x-access-token:${GITHUB_TOKEN}@github.com/${GH_ORGANIZATION}/${PIPELINE_REPOSITORY}.git" \
+							pipeline
+					'''
+				}
+			}
+		}
 	
 		stage('Load Configuration') {
 
@@ -68,7 +99,7 @@ pipeline {
 					echo ""
 					echo "Pipeline branch:"
 					echo "$BRANCH_NAME"
-
+								
 					echo ""
 					echo "Configuration file:"
 					echo "$CONFIG_FILE"
