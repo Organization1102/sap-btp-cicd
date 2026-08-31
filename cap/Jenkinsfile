@@ -1,6 +1,62 @@
 // ================================================================
-// Q8 DevOps CAP Template v2.0
+// Q8 DevOps CAP Template v3.0 -- add function for env deploy
 // ================================================================
+
+def deployToEnvironment(String targetEnvironment) {
+
+    echo "================================================="
+    echo "Deploy to ${targetEnvironment.toUpperCase()}"
+    echo "================================================="
+
+    def cfApi = sh(
+        script: "yq -r '.environment.${targetEnvironment}.cf.api' '${env.CONFIG_FILE}'",
+        returnStdout: true
+    ).trim()
+
+    def cfOrg = sh(
+        script: "yq -r '.environment.${targetEnvironment}.cf.org' '${env.CONFIG_FILE}'",
+        returnStdout: true
+    ).trim()
+
+    def cfSpace = sh(
+        script: "yq -r '.environment.${targetEnvironment}.cf.space' '${env.CONFIG_FILE}'",
+        returnStdout: true
+    ).trim()
+
+    def credentialsId = sh(
+        script: "yq -r '.environment.${targetEnvironment}.credentials.cf' '${env.CONFIG_FILE}'",
+        returnStdout: true
+    ).trim()
+
+    withCredentials([
+        usernamePassword(
+            credentialsId: credentialsId,
+            usernameVariable: 'CF_USER',
+            passwordVariable: 'CF_PASSWORD'
+        )
+    ]) {
+
+        dir(env.PROJECT_DIR) {
+
+            sh """
+                set -e
+
+                MTAR=\$(find "${env.MTAR_DIR}" -name "*.mtar" | head -n 1)
+
+                if [ -z "\$MTAR" ]; then
+                    echo "ERROR: MTAR not found"
+                    exit 1
+                fi
+
+                cf api "${cfApi}"
+                cf auth "\$CF_USER" "\$CF_PASSWORD"
+                cf target -o "${cfOrg}" -s "${cfSpace}"
+
+                cf deploy "\$MTAR" -f
+            """
+        }
+    }
+}
 
 pipeline {
     agent any
@@ -1057,85 +1113,15 @@ stage('Semantic Release') {
         stage('Deploy') {
 
             when {
-
                 expression {
-
-                    env.NO_RELEASE != 'true'
+                    return env.NO_RELEASE != 'true'
                 }
             }
 
             steps {
 
-                withCredentials([
-
-                    usernamePassword(
-
-                        credentialsId: env.CF_CREDENTIALS_ID,
-
-                        usernameVariable: 'CF_USER',
-
-                        passwordVariable: 'CF_PASSWORD'
-                    )
-                ]) {
-
-                    dir("${PROJECT_DIR}") {
-
-                        sh '''
-
-                            set -e
-
-                            echo "================================================="
-                            echo "Deploy to SAP BTP"
-                            echo "================================================="
-
-
-                            MTAR=$(find "${MTAR_DIR}" -name "*.mtar" | head -n 1)
-
-
-                            if [ -z "$MTAR" ]; then
-
-                                echo "ERROR: MTAR not found"
-
-                                exit 1
-
-                            fi
-
-
-                            echo "MTAR: $MTAR"
-
-
-                            echo ""
-
-                            echo "CF API: $CF_API"
-
-                            echo "CF ORG: $CF_ORG"
-
-                            echo "CF SPACE: $CF_SPACE"
-
-
-                            cf api "$CF_API"
-
-
-                            cf auth "$CF_USER" "$CF_PASSWORD"
-
-
-                            cf target -o "$CF_ORG" -s "$CF_SPACE"
-
-
-                            echo ""
-
-                            echo "Deploying MTAR..."
-
-
-                            cf deploy "$MTAR" -f
-
-
-                            echo ""
-
-                            echo "Deployment completed successfully"
-
-                        '''
-                    }
+                script {
+                    deployToEnvironment('dev')
                 }
             }
         }
