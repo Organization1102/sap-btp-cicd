@@ -10,7 +10,7 @@ branchStrategy:
   main:
 
     applicationBranch: main
-    environment: test
+    environment: dev
 
   develop:
 
