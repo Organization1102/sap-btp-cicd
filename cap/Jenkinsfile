@@ -199,16 +199,6 @@ pipeline {
                         yq -r ".environment.${ENVIRONMENT}.nexus.repository" "$CONFIG_FILE"
                     )
 
-                    if [ -z "$NEXUS_REPO" ] || \
-                       [ "$NEXUS_REPO" = "null" ] || \
-                       echo "$NEXUS_REPO" | grep -q '^<.*>$'; then
-
-                        echo "WARNING: Nexus repository is not configured for environment: $ENVIRONMENT"
-                        echo "Nexus publication will not be available"
-
-                        NEXUS_REPO=""
-                    fi
-
                     validate_config() {
 
                         NAME="$1"
@@ -232,6 +222,7 @@ pipeline {
                     validate_config "CF ORG" "$CF_ORG"
                     validate_config "CF SPACE" "$CF_SPACE"
                     validate_config "CF credentials" "$CF_CREDENTIALS_ID"
+                    # validate_config "Nexus repository" "$NEXUS_REPO"
                     
 					echo ""
 					echo "================================================="
