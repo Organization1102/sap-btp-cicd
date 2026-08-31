@@ -199,44 +199,40 @@ pipeline {
                         yq -r ".environment.${ENVIRONMENT}.nexus.repository" "$CONFIG_FILE"
                     )
 
-                    if [ -z "$CF_API" ] || [ "$CF_API" = "null" ]; then
-                        echo "ERROR: CF API not configured for environment: $ENVIRONMENT"
-                        exit 1
+                    if [ -z "$NEXUS_REPO" ] || \
+                       [ "$NEXUS_REPO" = "null" ] || \
+                       echo "$NEXUS_REPO" | grep -q '^<.*>$'; then
+
+                        echo "WARNING: Nexus repository is not configured for environment: $ENVIRONMENT"
+                        echo "Nexus publication will not be available"
+
+                        NEXUS_REPO=""
                     fi
 
-                    if [ -z "$CF_ORG" ] || [ "$CF_ORG" = "null" ]; then
-                        echo "ERROR: CF ORG not configured for environment: $ENVIRONMENT"
-                        exit 1
-                    fi
+                    validate_config() {
 
-                    if [ -z "$CF_SPACE" ] || [ "$CF_SPACE" = "null" ]; then
-                        echo "ERROR: CF SPACE not configured for environment: $ENVIRONMENT"
-                        exit 1
-                    fi
+                        NAME="$1"
+                        VALUE="$2"
 
-                    if [ -z "$CF_CREDENTIALS_ID" ] || [ "$CF_CREDENTIALS_ID" = "null" ]; then
-                        echo "ERROR: CF credentials not configured for environment: $ENVIRONMENT"
-                        exit 1
-                    fi
+                        if [ -z "$VALUE" ] || \
+                           [ "$VALUE" = "null" ] || \
+                           echo "$VALUE" | grep -q '^<.*>$'; then
 
-					if [ -z "$APPLICATION_REPOSITORY" ] || \
-					[ "$APPLICATION_REPOSITORY" = "null" ]; then
+                            echo "ERROR: $NAME is not configured for environment: $ENVIRONMENT"
+                            exit 1
 
-						echo "ERROR: Application repository not configured"
+                        fi
+                    }
 
-						exit 1
+                    validate_config "Application repository" "$APPLICATION_REPOSITORY"
+                    validate_config "Application branch" "$APPLICATION_BRANCH"
+                    validate_config "Environment" "$ENVIRONMENT"
 
-					fi
-
-					if [ -z "$APPLICATION_BRANCH" ] || \
-					[ "$APPLICATION_BRANCH" = "null" ]; then
-
-						echo "ERROR: Application branch could not be resolved"
-
-						exit 1
-
-					fi
-
+                    validate_config "CF API" "$CF_API"
+                    validate_config "CF ORG" "$CF_ORG"
+                    validate_config "CF SPACE" "$CF_SPACE"
+                    validate_config "CF credentials" "$CF_CREDENTIALS_ID"
+                    
 					echo ""
 					echo "================================================="
 					echo "Resolved Configuration"
