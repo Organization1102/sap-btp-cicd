@@ -255,6 +255,18 @@ pipeline {
                         yq -r ".environment.${ENVIRONMENT}.nexus.repository" "$CONFIG_FILE"
                     )
 
+                    NEXUS_CREDENTIALS_ID=$(
+                        yq -r ".environment.${ENVIRONMENT}.credentials.nexus" "$CONFIG_FILE"
+                    )
+
+                    NEXUS_URL=$(
+                        yq -r ".environment.${ENVIRONMENT}.nexus.url" "$CONFIG_FILE"
+                    )
+
+                    NEXUS_REPO=$(
+                        yq -r ".environment.${ENVIRONMENT}.nexus.repository" "$CONFIG_FILE"
+                    )
+
                     validate_config() {
 
                         NAME="$1"
@@ -278,7 +290,9 @@ pipeline {
                     validate_config "CF ORG" "$CF_ORG"
                     validate_config "CF SPACE" "$CF_SPACE"
                     validate_config "CF credentials" "$CF_CREDENTIALS_ID"
-                    # validate_config "Nexus repository" "$NEXUS_REPO"
+                    validate_config "Nexus URL" "$NEXUS_URL"
+                    validate_config "Nexus repository" "$NEXUS_REPO"
+                    validate_config "Nexus credentials" "$NEXUS_CREDENTIALS_ID"
                     
 					echo ""
 					echo "================================================="
@@ -296,7 +310,9 @@ pipeline {
 
                     echo "CF credentials ID:      $CF_CREDENTIALS_ID"
 
+                    echo "Nexus url:              $NEXUS_URL"
                     echo "Nexus repository:       $NEXUS_REPO"
+                    echo "Nexus credentials ID:   $NEXUS_CREDENTIALS_ID"
 
 					echo ""
 
@@ -311,7 +327,9 @@ pipeline {
 
                     echo "CF_CREDENTIALS_ID=$CF_CREDENTIALS_ID" >> branch.env
 
+                    echo "NEXUS_URL=$NEXUS_URL" >> branch.env
                     echo "NEXUS_REPO=$NEXUS_REPO" >> branch.env
+                    echo "NEXUS_CREDENTIALS_ID=$NEXUS_CREDENTIALS_ID" >> branch.env
 
 				'''
 
@@ -330,7 +348,9 @@ pipeline {
 
                     env.CF_CREDENTIALS_ID      = props.CF_CREDENTIALS_ID
 
+                    env.NEXUS_URL              = props.NEXUS_URL
                     env.NEXUS_REPO             = props.NEXUS_REPO
+                    env.NEXUS_CREDENTIALS_ID   = props.NEXUS_CREDENTIALS_ID
 
 					echo "APPLICATION_REPOSITORY = ${env.APPLICATION_REPOSITORY}"
 					echo "APPLICATION_BRANCH     = ${env.APPLICATION_BRANCH}"
@@ -343,7 +363,10 @@ pipeline {
                     
                     echo "CF_CREDENTIALS_ID      = ${env.CF_CREDENTIALS_ID}"
 
+                    echo "NEXUS_URL              = ${env.NEXUS_URL}"
+
                     echo "NEXUS_REPO             = ${env.NEXUS_REPO}"
+                    
 				}
 			}
 		}
@@ -1089,20 +1112,64 @@ stage('Semantic Release') {
         stage('Publish Nexus') {
 
             when {
-
                 expression {
-
-                    env.NO_RELEASE != 'true'
+                    return env.NO_RELEASE != 'true'
                 }
             }
 
             steps {
 
-                echo "Nexus publication placeholder"
+                script {
 
-                echo "NEXUS_URL  = ${env.NEXUS_URL}"
+                    echo "================================================="
+                    echo "Publish MTAR to Nexus"
+                    echo "================================================="
 
-                echo "NEXUS_REPO = ${env.NEXUS_REPO}"
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: env.NEXUS_CREDENTIALS_ID,
+                            usernameVariable: 'NEXUS_USER',
+                            passwordVariable: 'NEXUS_PASSWORD'
+                        )
+                    ]) {
+
+                        dir(env.PROJECT_DIR) {
+
+                            sh '''
+                                set -e
+
+                                MTAR=$(find "${MTAR_DIR}" -name "*.mtar" | head -n 1)
+
+                                if [ -z "$MTAR" ]; then
+                                    echo "ERROR: MTAR not found"
+                                    exit 1
+                                fi
+
+                                MTAR_NAME=$(basename "$MTAR")
+
+                                ARTIFACT_PATH="cap/${APPLICATION_REPOSITORY}/${VERSION}/${MTAR_NAME}"
+
+                                NEXUS_TARGET="${NEXUS_URL}/repository/${NEXUS_REPO}/${ARTIFACT_PATH}"
+
+                                echo "MTAR:       $MTAR"
+                                echo "Version:    $VERSION"
+                                echo "Repository: $NEXUS_REPO"
+                                echo "Path:       $ARTIFACT_PATH"
+
+                                curl \
+                                    --fail \
+                                    --show-error \
+                                    --silent \
+                                    --user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+                                    --upload-file "$MTAR" \
+                                    "$NEXUS_TARGET"
+
+                                echo ""
+                                echo "Artifact successfully published to Nexus"
+                            '''
+                        }
+                    }
+                }
             }
         }
 
