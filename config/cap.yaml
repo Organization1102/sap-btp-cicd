@@ -1,14 +1,67 @@
 technology: cap
 
 application:
+
   repository: sap-btp-wflibero2-cap-cicd
 
+
 branchStrategy:
+
   main:
+
     applicationBranch: main
+    environment: dev
 
   develop:
+
     applicationBranch: develop
+    environment: dev
 
   feature/*:
+
     applicationBranch: main
+    environment: dev
+
+
+environment:
+
+  dev:
+
+    cf:
+      api: https://api.cf.us10-001.hana.ondemand.com
+      org: 3d52b474trial
+      space: dev
+
+    credentials:
+      cf: cf-btp-trial
+
+    nexus:
+      repository: sap-btp-raw-dev-hosted
+
+
+  test:
+
+    cf:
+      api: <API-TEST>
+      org: <ORG-TEST>
+      space: <SPACE-TEST>
+
+    credentials:
+      cf: <CREDENTIAL-ID-TEST>
+
+    nexus:
+      repository: <NEXUS-REPO-TEST>
+
+
+  prod:
+
+    cf:
+      api: <API-PROD>
+      org: <ORG-PROD>
+      space: <SPACE-PROD>
+
+    credentials:
+      cf: <CREDENTIAL-ID-PROD>
+
+    nexus:
+      repository: <NEXUS-REPO-PROD>
