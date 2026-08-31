@@ -1139,6 +1139,53 @@ stage('Semantic Release') {
                 }
             }
         }
+		
+		stage('Approval - Promote to Test') {
+
+			when {
+				expression {
+					return env.NO_RELEASE != 'true'
+				}
+			}
+
+			steps {
+
+				script {
+
+					input(
+						message: "Promote version ${env.VERSION} from DEV to TEST?",
+						ok: "Approve Promotion"
+					)
+
+				}
+
+			}
+		}
+		
+		stage('Promote to Test') {
+
+			when {
+				expression {
+					return env.NO_RELEASE != 'true'
+				}
+			}
+
+			steps {
+
+				echo "================================================="
+				echo "Promote Artifact"
+				echo "================================================="
+
+				echo "Version: ${env.VERSION}"
+				echo "Source environment: DEV"
+				echo "Target environment: TEST"
+
+				echo ""
+				echo "TEST deployment is currently simulated."
+				echo "No real Cloud Foundry deployment will be executed."
+
+			}
+		}
 
         stage('Commit & Tag Release') {
 
