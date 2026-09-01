@@ -1150,6 +1150,10 @@ EOF
             steps {
 
                 script {
+
+                    echo "Environment: ${env.ENVIRONMENT}"
+                    echo "Deploy MTAR: ${env.DEPLOY_MTAR}"
+                    
                     deployToEnvironment(
                         env.ENVIRONMENT,
                         env.DEPLOY_MTAR
