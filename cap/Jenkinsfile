@@ -2,7 +2,7 @@
 // Q8 DevOps CAP Template v3.2 -- Nexus promotion as deploy source
 // ================================================================
 
-def deployToEnvironment(String targetEnvironment) {
+def deployToEnvironment(String targetEnvironment, String mtarPath) {
 
     if (!targetEnvironment?.trim()) {
         error("Target environment is empty")
