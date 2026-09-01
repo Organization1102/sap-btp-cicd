@@ -848,16 +848,111 @@ stage('Semantic Release') {
         }
 
         // ========================================================
+        // CHECK NEXUS ARTIFACT
+        // ========================================================
+
+        stage('Check Nexus Artifact') {
+
+    when {
+        expression {
+            return env.NO_RELEASE != 'true'
+        }
+    }
+
+    steps {
+
+        script {
+
+            echo "================================================="
+            echo "Check Nexus Artifact"
+            echo "================================================="
+
+            env.ARTIFACT_PATH =
+                "cap/${env.APPLICATION_REPOSITORY}/${env.VERSION}/application.mtar"
+
+            withCredentials([
+                usernamePassword(
+                    credentialsId: env.NEXUS_CREDENTIALS_ID,
+                    usernameVariable: 'NEXUS_USER',
+                    passwordVariable: 'NEXUS_PASSWORD'
+                )
+            ]) {
+
+                sh '''
+                    set -e
+
+                    NEXUS_TARGET="${NEXUS_URL}/repository/${NEXUS_REPO}/${ARTIFACT_PATH}"
+
+                    echo "Version: $VERSION"
+                    echo "Path:    $ARTIFACT_PATH"
+
+                    HTTP_CODE=$(
+                        curl \
+                            --silent \
+                            --output /dev/null \
+                            --write-out "%{http_code}" \
+                            --user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+                            --head \
+                            "$NEXUS_TARGET"
+                    )
+
+                    case "$HTTP_CODE" in
+
+                        200)
+                            echo ""
+                            echo "Artifact already exists on Nexus."
+                            echo "Release candidate $VERSION will be reused."
+
+                            echo "NEXUS_ARTIFACT_EXISTS=true" \
+                                > nexus.env
+                            ;;
+
+                        404)
+                            echo ""
+                            echo "Artifact not found on Nexus."
+                            echo "A new release candidate will be built."
+
+                            echo "NEXUS_ARTIFACT_EXISTS=false" \
+                                > nexus.env
+                            ;;
+
+                        *)
+                            echo ""
+                            echo "ERROR: Unable to check Nexus artifact"
+                            echo "HTTP status: $HTTP_CODE"
+                            exit 1
+                            ;;
+                    esac
+                '''
+
+                def props = readProperties file: 'nexus.env'
+
+                env.NEXUS_ARTIFACT_EXISTS =
+                    props.NEXUS_ARTIFACT_EXISTS
+            }
+
+            echo "Nexus artifact exists: ${env.NEXUS_ARTIFACT_EXISTS}"
+        }
+    }
+}
+
+        // ========================================================
         // BUILD MTAR
         // ========================================================
 
         stage('Build MTAR') {
 
             when {
+                allOf {
+                
+                    expression {
 
-                expression {
-
-                    env.NO_RELEASE != 'true'
+                        return env.NO_RELEASE != 'true'
+                    }
+                    
+                    expression {
+                        return env.NEXUS_ARTIFACT_EXISTS != 'true'
+                    }
                 }
             }
 
@@ -878,11 +973,7 @@ stage('Semantic Release') {
 
                         rm -rf "${MTAR_DIR}"
 
-
-                        echo "Running MBT build..."
-
                         mbt build -p cf -t "${MTAR_DIR}"
-
 
                         MTAR=$(
                             find "${MTAR_DIR}" \
@@ -896,42 +987,42 @@ stage('Semantic Release') {
                             exit 1
                         fi
 
-                        MTAR_NAME=$(basename "$MTAR")
-
-                        ARTIFACT_PATH="cap/${APPLICATION_REPOSITORY}/${VERSION}/${MTAR_NAME}"
-
-                        echo ""
                         echo "Generated artifact: $MTAR"
-                        echo "Nexus path:        $ARTIFACT_PATH"
 
                         cat > artifact.env <<EOF
 BUILT_MTAR=$MTAR
-MTAR_NAME=$MTAR_NAME
-ARTIFACT_PATH=$ARTIFACT_PATH
 EOF
-            '''
+                    '''
 
-            script {
+                    script {
 
-                def props = readProperties file: 'artifact.env'
+                        def props =
+                            readProperties file: 'artifact.env'
 
-                env.BUILT_MTAR    = props.BUILT_MTAR
-                env.MTAR_NAME     = props.MTAR_NAME
-                env.ARTIFACT_PATH = props.ARTIFACT_PATH
+                        env.BUILT_MTAR =
+                            props.BUILT_MTAR
+
+                    }
+                }
             }
-         }
-       }
-    }
+        }
 
         // ========================================================
-        // PUBLISH/REUSE NEXUS ARTIFACT
+        // PUBLISH NEXUS ARTIFACT
         // ========================================================
 
-        stage('Publish or Reuse Nexus Artifact') {
+        stage('Publish Nexus Artifact') {
 
             when {
-                expression {
-                    return env.NO_RELEASE != 'true'
+                allOf {
+
+                    expression {
+                        return env.NO_RELEASE != 'true'
+                    }
+
+                    expression {
+                        return env.NEXUS_ARTIFACT_EXISTS != 'true'
+                    }
                 }
             }
 
@@ -940,7 +1031,7 @@ EOF
                 script {
 
                     echo "================================================="
-                    echo "Publish or Reuse Nexus Artifact"
+                    echo "Publish Nexus Artifact"
                     echo "================================================="
 
                     withCredentials([
@@ -965,58 +1056,17 @@ EOF
 
                                 echo "MTAR:       $MTAR"
                                 echo "Version:    $VERSION"
-                                echo "Repository: $NEXUS_REPO"
-                                echo "Path:       $ARTIFACT_PATH"
+
+                                curl \
+                                    --fail \
+                                    --show-error \
+                                    --silent \
+                                    --user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+                                    --upload-file "$BUILT_MTAR" \
+                                    "$NEXUS_TARGET"
 
                                 echo ""
-                                echo "Checking artifact on Nexus..."
-
-                                HTTP_CODE=$(
-                                    curl \
-                                        --silent \
-                                        --output /dev/null \
-                                        --write-out "%{http_code}" \
-                                        --user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-                                        --head \
-                                        "$NEXUS_TARGET"
-                                )
-
-                                case "$HTTP_CODE" in
-
-                                    200)
-
-                                        echo ""
-                                        echo "Artifact already exists on Nexus."
-                                        echo "Existing immutable artifact will be reused."
-                                        ;;
-
-                                    404)
-
-                                        echo ""
-                                        echo "Artifact not found on Nexus."
-                                        echo "Publishing new immutable artifact..."
-
-                                        curl \
-                                            --fail \
-                                            --show-error \
-                                            --silent \
-                                            --user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-                                            --upload-file "$BUILT_MTAR" \
-                                            "$NEXUS_TARGET"
-
-                                        echo ""
-                                        echo "Artifact successfully published to Nexus"
-                                        ;;
-
-                                    *)
-
-                                        echo ""
-                                        echo "ERROR: Unable to verify artifact on Nexus"
-                                        echo "HTTP status: $HTTP_CODE"
-
-                                        exit 1
-                                        ;;
-                                esac
+                                echo "Artifact successfully published to Nexus"
                             '''
                         }
                     }
@@ -1026,112 +1076,136 @@ EOF
 
         stage('Download Nexus Artifact') {
 
-            when {
-                expression {
-                    env.NO_RELEASE != 'true'
-                }
-            }
+    when {
+        expression {
+            return env.NO_RELEASE != 'true'
+        }
+    }
 
-            steps {
+    steps {
 
-                script {
+        script {
 
-                    echo "================================================="
-                    echo "Download Nexus Artifact"
-                    echo "================================================="
+            echo "================================================="
+            echo "Download Nexus Artifact"
+            echo "================================================="
 
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: env.NEXUS_CREDENTIALS_ID,
-                            usernameVariable: 'NEXUS_USER',
-                            passwordVariable: 'NEXUS_PASSWORD'
-                        )
-                    ]) {
+            withCredentials([
+                usernamePassword(
+                    credentialsId: env.NEXUS_CREDENTIALS_ID,
+                    usernameVariable: 'NEXUS_USER',
+                    passwordVariable: 'NEXUS_PASSWORD'
+                )
+            ]) {
 
-                        dir(env.PROJECT_DIR) {
+                dir(env.PROJECT_DIR) {
 
-                            sh '''
-                                set -e
+                    sh '''
+                        set -e
 
-                                DOWNLOAD_DIR="${MTAR_DIR}/nexus"
+                        DOWNLOAD_DIR="${MTAR_DIR}/nexus"
 
-                                rm -rf "$DOWNLOAD_DIR"
-                                mkdir -p "$DOWNLOAD_DIR"
+                        rm -rf "$DOWNLOAD_DIR"
+                        mkdir -p "$DOWNLOAD_DIR"
 
-                                DEPLOY_MTAR="${DOWNLOAD_DIR}/${MTAR_NAME}"
+                        DEPLOY_MTAR="${DOWNLOAD_DIR}/application.mtar"
 
-                                NEXUS_TARGET="${NEXUS_URL}/repository/${NEXUS_REPO}/${ARTIFACT_PATH}"
+                        NEXUS_TARGET="${NEXUS_URL}/repository/${NEXUS_REPO}/${ARTIFACT_PATH}"
 
-                                echo "Version: $VERSION"
-                                echo "Path:    $ARTIFACT_PATH"
+                        echo "Version: $VERSION"
+                        echo "Path:    $ARTIFACT_PATH"
+
+                        echo ""
+                        echo "Downloading artifact from Nexus..."
+
+                        curl \
+                            --fail \
+                            --show-error \
+                            --silent \
+                            --user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+                            --output "$DEPLOY_MTAR" \
+                            "$NEXUS_TARGET"
+
+                        if [ ! -s "$DEPLOY_MTAR" ]; then
+                            echo "ERROR: Downloaded MTAR is empty or missing"
+                            exit 1
+                        fi
+
+
+                        # =========================================
+                        # ARTIFACT INTEGRITY
+                        # =========================================
+
+                        if [ "$NEXUS_ARTIFACT_EXISTS" = "false" ]; then
+
+                            echo ""
+                            echo "Verifying published artifact integrity..."
+
+                            if [ ! -f "$BUILT_MTAR" ]; then
+                                echo "ERROR: Built MTAR not found: $BUILT_MTAR"
+                                exit 1
+                            fi
+
+                            BUILT_SHA256=$(
+                                sha256sum "$BUILT_MTAR" |
+                                awk '{print $1}'
+                            )
+
+                            NEXUS_SHA256=$(
+                                sha256sum "$DEPLOY_MTAR" |
+                                awk '{print $1}'
+                            )
+
+                            echo "Built artifact SHA256: $BUILT_SHA256"
+                            echo "Nexus artifact SHA256: $NEXUS_SHA256"
+
+                            if [ "$BUILT_SHA256" != "$NEXUS_SHA256" ]; then
 
                                 echo ""
-                                echo "Downloading artifact from Nexus..."
+                                echo "ERROR: Nexus artifact differs from uploaded artifact"
+                                exit 1
 
-                                curl \
-                                    --fail \
-                                    --show-error \
-                                    --silent \
-                                    --user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-                                    --output "$DEPLOY_MTAR" \
-                                    "$NEXUS_TARGET"
+                            fi
 
-                                if [ ! -s "$DEPLOY_MTAR" ]; then
-                                    echo "ERROR: Downloaded MTAR is empty or missing"
-                                    exit 1
-                                fi
+                            echo ""
+                            echo "Artifact integrity verified"
+
+                        else
+
+                            NEXUS_SHA256=$(
+                                sha256sum "$DEPLOY_MTAR" |
+                                awk '{print $1}'
+                            )
+
+                            echo ""
+                            echo "Existing Nexus release candidate reused"
+                            echo "SHA256: $NEXUS_SHA256"
+
+                        fi
 
 
-                                # =========================================
-                                # ARTIFACT INTEGRITY
-                                # =========================================
+                        # =========================================
+                        # DEPLOYMENT ARTIFACT
+                        # =========================================
 
-                                echo ""
-                                echo "Verifying artifact integrity..."
-
-                                BUILT_SHA256=$(
-                                    sha256sum "$BUILT_MTAR" |
-                                    awk '{print $1}'
-                                )
-
-                                NEXUS_SHA256=$(
-                                    sha256sum "$DEPLOY_MTAR" |
-                                    awk '{print $1}'
-                                )
-
-                                echo "Built artifact SHA256: $BUILT_SHA256"
-                                echo "Nexus artifact SHA256: $NEXUS_SHA256"
-
-                                if [ "$BUILT_SHA256" != "$NEXUS_SHA256" ]; then
-
-                                    echo ""
-                                    echo "ERROR: Nexus artifact differs from the locally built artifact"
-                                    echo "Version $VERSION already identifies different immutable content."
-
-                                    exit 1
-                                fi
-
-                                echo ""
-                                echo "Artifact integrity verified"
-
-                                cat > deploy.env <<EOF
+                        cat > deploy.env <<EOF
 DEPLOY_MTAR=$DEPLOY_MTAR
 EOF
-                            '''
+                    '''
 
-                            script {
+                    script {
 
-                                def props = readProperties file: 'deploy.env'
+                        def props = readProperties file: 'deploy.env'
 
-                                env.DEPLOY_MTAR = props.DEPLOY_MTAR
+                        env.DEPLOY_MTAR = props.DEPLOY_MTAR
 
-                                echo "Deployment artifact: ${env.DEPLOY_MTAR}"
-                            }
-                        }
+                        echo "Deployment artifact: ${env.DEPLOY_MTAR}"
                     }
                 }
             }
         }
+    }
+}
 
 
 
