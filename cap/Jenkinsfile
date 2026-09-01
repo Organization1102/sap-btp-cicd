@@ -969,7 +969,7 @@ stage('Semantic Release') {
             steps {
 
                 script {
-                    deployToEnvironment('env.ENVIRONMENT')
+                    deployToEnvironment(env.ENVIRONMENT)
                 }
             }
         }
