@@ -1,5 +1,5 @@
 // ================================================================
-// Q8 DevOps CAP Template v3.0 -- add function for env deploy
+// Q8 DevOps CAP Template v3.1 -- optimize pipeline
 // ================================================================
 
 def deployToEnvironment(String targetEnvironment) {
@@ -8,25 +8,30 @@ def deployToEnvironment(String targetEnvironment) {
     echo "Deploy to ${targetEnvironment.toUpperCase()}"
     echo "================================================="
 
-    def cfApi = sh(
-        script: "yq -r '.environment.${targetEnvironment}.cf.api' '${env.CONFIG_FILE}'",
+    def config = sh(
+        script: """
+            yq -r '
+                .environment.${targetEnvironment} |
+                [
+                    .cf.api,
+                    .cf.org,
+                    .cf.space,
+                    .credentials.cf
+                ] |
+                .[]
+            ' '${env.CONFIG_FILE}'
+        """,
         returnStdout: true
-    ).trim()
+    ).trim().readLines()
 
-    def cfOrg = sh(
-        script: "yq -r '.environment.${targetEnvironment}.cf.org' '${env.CONFIG_FILE}'",
-        returnStdout: true
-    ).trim()
+    if (config.size() != 4 || config.any { !it || it == 'null' || it ==~ /<.*>/ }) {
+        error("Cloud Foundry configuration is incomplete for environment: ${targetEnvironment}")
+    }
 
-    def cfSpace = sh(
-        script: "yq -r '.environment.${targetEnvironment}.cf.space' '${env.CONFIG_FILE}'",
-        returnStdout: true
-    ).trim()
-
-    def credentialsId = sh(
-        script: "yq -r '.environment.${targetEnvironment}.credentials.cf' '${env.CONFIG_FILE}'",
-        returnStdout: true
-    ).trim()
+    def cfApi         = config[0]
+    def cfOrg         = config[1]
+    def cfSpace       = config[2]
+    def credentialsId = config[3]
 
     withCredentials([
         usernamePassword(
@@ -110,11 +115,7 @@ pipeline {
 						echo "Checkout Pipeline Repository"
 						echo "================================================="
 
-						echo "Repository:"
-						echo "$PIPELINE_REPOSITORY"
-
-						echo "Branch:"
-						echo "$BRANCH_NAME"
+                        echo "Cloning ${PIPELINE_REPOSITORY}@${BRANCH_NAME}"
 
 						git clone \
 							--branch "$BRANCH_NAME" \
@@ -127,113 +128,66 @@ pipeline {
 	
 		stage('Load Configuration') {
 
-			steps {
+            steps {
 
-				sh '''
+                sh '''
+                    set -e
 
-					set -e
+                    echo "================================================="
+                    echo "Load Pipeline Configuration"
+                    echo "================================================="
 
-					echo "================================================="
-					echo "Load Pipeline Configuration"
-					echo "================================================="
+                    if [ ! -f "$CONFIG_FILE" ]; then
+                        echo "ERROR: Configuration file not found: $CONFIG_FILE"
+                        exit 1
+                    fi
 
-					echo ""
-					echo "Pipeline branch:"
-					echo "$BRANCH_NAME"
-								
-					echo ""
-					echo "Configuration file:"
-					echo "$CONFIG_FILE"
+                    APPLICATION_REPOSITORY=$(
+                        yq -r '.application.repository' "$CONFIG_FILE"
+                    )
 
-					if [ ! -f "$CONFIG_FILE" ]; then
+                    case "$BRANCH_NAME" in
 
-						echo "ERROR: Configuration file not found:"
-						echo "$CONFIG_FILE"
-
-						exit 1
-
-					fi
-
-					echo ""
-					echo "Configuration:"
-					cat "$CONFIG_FILE"
-
-					echo ""
-					echo "Technology:"
-
-					yq -r '.technology' "$CONFIG_FILE"
-
-					echo ""
-					echo "Application repository:"
-
-					APPLICATION_REPOSITORY=$(
-						yq -r '.application.repository' "$CONFIG_FILE"
-					)
-
-					echo "$APPLICATION_REPOSITORY"
-
-					echo ""
-					echo "Resolving application branch..."
-
-					case "$BRANCH_NAME" in
-
-						main)
-
-							APPLICATION_BRANCH=$(
-								yq -r '.branchStrategy.main.applicationBranch' "$CONFIG_FILE"
-							)
+                        main)
+                            APPLICATION_BRANCH=$(
+                                yq -r '.branchStrategy.main.applicationBranch' "$CONFIG_FILE"
+                            )
 
                             ENVIRONMENT=$(
                                 yq -r '.branchStrategy.main.environment' "$CONFIG_FILE"
                             )
+                            ;;
 
-							;;
-
-						develop)
-
-							APPLICATION_BRANCH=$(
-								yq -r '.branchStrategy.develop.applicationBranch' "$CONFIG_FILE"
-							)
+                        develop)
+                            APPLICATION_BRANCH=$(
+                                yq -r '.branchStrategy.develop.applicationBranch' "$CONFIG_FILE"
+                            )
 
                             ENVIRONMENT=$(
                                 yq -r '.branchStrategy.develop.environment' "$CONFIG_FILE"
                             )
+                            ;;
 
-							;;
-
-						feature/*)
-
-							APPLICATION_BRANCH=$(
-								yq -r '.branchStrategy."feature/*".applicationBranch' "$CONFIG_FILE"
-							)
+                        feature/*)
+                            APPLICATION_BRANCH=$(
+                                yq -r '.branchStrategy."feature/*".applicationBranch' "$CONFIG_FILE"
+                            )
 
                             ENVIRONMENT=$(
                                 yq -r '.branchStrategy."feature/*".environment' "$CONFIG_FILE"
                             )
+                            ;;
 
-							;;
+                        *)
+                            echo "ERROR: No branch strategy configured for: $BRANCH_NAME"
+                            exit 1
+                            ;;
+                    esac
 
-						*)
 
-							echo "ERROR: No branch strategy configured for:"
-							echo "$BRANCH_NAME"
-
-							exit 1
-
-							;;
-
-					esac
-
-                    echo ""
-                    echo "Resolving environment configuration..."
-
-                    if [ -z "$ENVIRONMENT" ] || [ "$ENVIRONMENT" = "null" ]; then
-
-                        echo "ERROR: Environment could not be resolved"
-
-                        exit 1
-
-                    fi
+                    # =====================================================
+                    # ENVIRONMENT CONFIGURATION
+                    # =====================================================
 
                     CF_API=$(
                         yq -r ".environment.${ENVIRONMENT}.cf.api" "$CONFIG_FILE"
@@ -251,13 +205,10 @@ pipeline {
                         yq -r ".environment.${ENVIRONMENT}.credentials.cf" "$CONFIG_FILE"
                     )
 
-                    NEXUS_REPO=$(
-                        yq -r ".environment.${ENVIRONMENT}.nexus.repository" "$CONFIG_FILE"
-                    )
 
-                    NEXUS_CREDENTIALS_ID=$(
-                        yq -r ".environment.${ENVIRONMENT}.credentials.nexus" "$CONFIG_FILE"
-                    )
+                    # =====================================================
+                    # NEXUS CONFIGURATION
+                    # =====================================================
 
                     NEXUS_URL=$(
                         yq -r ".environment.${ENVIRONMENT}.nexus.url" "$CONFIG_FILE"
@@ -267,18 +218,26 @@ pipeline {
                         yq -r ".environment.${ENVIRONMENT}.nexus.repository" "$CONFIG_FILE"
                     )
 
+                    NEXUS_CREDENTIALS_ID=$(
+                        yq -r ".environment.${ENVIRONMENT}.credentials.nexus" "$CONFIG_FILE"
+                    )
+
+
+                    # =====================================================
+                    # CONFIGURATION VALIDATION
+                    # =====================================================
+
                     validate_config() {
 
                         NAME="$1"
                         VALUE="$2"
 
                         if [ -z "$VALUE" ] || \
-                           [ "$VALUE" = "null" ] || \
-                           echo "$VALUE" | grep -q '^<.*>$'; then
+                        [ "$VALUE" = "null" ] || \
+                        echo "$VALUE" | grep -q '^<.*>$'; then
 
                             echo "ERROR: $NAME is not configured for environment: $ENVIRONMENT"
                             exit 1
-
                         fi
                     }
 
@@ -290,86 +249,69 @@ pipeline {
                     validate_config "CF ORG" "$CF_ORG"
                     validate_config "CF SPACE" "$CF_SPACE"
                     validate_config "CF credentials" "$CF_CREDENTIALS_ID"
+
                     validate_config "Nexus URL" "$NEXUS_URL"
                     validate_config "Nexus repository" "$NEXUS_REPO"
                     validate_config "Nexus credentials" "$NEXUS_CREDENTIALS_ID"
-                    
-					echo ""
-					echo "================================================="
-					echo "Resolved Configuration"
-					echo "================================================="
 
-					echo "Pipeline branch:        $BRANCH_NAME"
-					echo "Application repository: $APPLICATION_REPOSITORY"
-					echo "Application branch:     $APPLICATION_BRANCH"
-                    echo "Environment:            $ENVIRONMENT"
 
-                    echo "CF API:                 $CF_API"
-                    echo "CF ORG:                 $CF_ORG"
-                    echo "CF SPACE:               $CF_SPACE"
+                    # =====================================================
+                    # EXPORT RESOLVED CONFIGURATION
+                    # =====================================================
 
-                    echo "CF credentials ID:      $CF_CREDENTIALS_ID"
+                    cat > branch.env <<EOF
+APPLICATION_REPOSITORY=$APPLICATION_REPOSITORY
+APPLICATION_BRANCH=$APPLICATION_BRANCH
+ENVIRONMENT=$ENVIRONMENT
+CF_API=$CF_API
+CF_ORG=$CF_ORG
+CF_SPACE=$CF_SPACE
+CF_CREDENTIALS_ID=$CF_CREDENTIALS_ID
+NEXUS_URL=$NEXUS_URL
+NEXUS_REPO=$NEXUS_REPO
+NEXUS_CREDENTIALS_ID=$NEXUS_CREDENTIALS_ID
+EOF
+        '''
 
-                    echo "Nexus url:              $NEXUS_URL"
-                    echo "Nexus repository:       $NEXUS_REPO"
-                    echo "Nexus credentials ID:   $NEXUS_CREDENTIALS_ID"
+        script {
 
-					echo ""
+            def props = readProperties file: 'branch.env'
 
-					echo "APPLICATION_REPOSITORY=$APPLICATION_REPOSITORY" > branch.env
-					echo "APPLICATION_BRANCH=$APPLICATION_BRANCH" >> branch.env
+            env.APPLICATION_REPOSITORY = props.APPLICATION_REPOSITORY
+            env.APPLICATION_BRANCH     = props.APPLICATION_BRANCH
+            env.ENVIRONMENT            = props.ENVIRONMENT
 
-                    echo "ENVIRONMENT=$ENVIRONMENT" >> branch.env
+            env.CF_API                 = props.CF_API
+            env.CF_ORG                 = props.CF_ORG
+            env.CF_SPACE               = props.CF_SPACE
+            env.CF_CREDENTIALS_ID      = props.CF_CREDENTIALS_ID
 
-                    echo "CF_API=$CF_API" >> branch.env
-                    echo "CF_ORG=$CF_ORG" >> branch.env
-                    echo "CF_SPACE=$CF_SPACE" >> branch.env
+            env.NEXUS_URL              = props.NEXUS_URL
+            env.NEXUS_REPO             = props.NEXUS_REPO
+            env.NEXUS_CREDENTIALS_ID   = props.NEXUS_CREDENTIALS_ID
 
-                    echo "CF_CREDENTIALS_ID=$CF_CREDENTIALS_ID" >> branch.env
+            echo """
+=================================================
+Resolved Pipeline Configuration
+=================================================
+Pipeline:    ${env.PIPELINE_REPOSITORY}@${env.BRANCH_NAME}
+Application: ${env.APPLICATION_REPOSITORY}@${env.APPLICATION_BRANCH}
+Environment: ${env.ENVIRONMENT}
 
-                    echo "NEXUS_URL=$NEXUS_URL" >> branch.env
-                    echo "NEXUS_REPO=$NEXUS_REPO" >> branch.env
-                    echo "NEXUS_CREDENTIALS_ID=$NEXUS_CREDENTIALS_ID" >> branch.env
+Cloud Foundry:
+  API:        ${env.CF_API}
+  Org:        ${env.CF_ORG}
+  Space:      ${env.CF_SPACE}
 
-				'''
+Nexus:
+  URL:        ${env.NEXUS_URL}
+  Repository: ${env.NEXUS_REPO}
 
-				script {
-
-					def props = readProperties file: 'branch.env'
-
-					env.APPLICATION_REPOSITORY = props.APPLICATION_REPOSITORY
-					env.APPLICATION_BRANCH = props.APPLICATION_BRANCH
-
-                    env.ENVIRONMENT            = props.ENVIRONMENT
-
-                    env.CF_API                 = props.CF_API
-                    env.CF_ORG                 = props.CF_ORG
-                    env.CF_SPACE               = props.CF_SPACE
-
-                    env.CF_CREDENTIALS_ID      = props.CF_CREDENTIALS_ID
-
-                    env.NEXUS_URL              = props.NEXUS_URL
-                    env.NEXUS_REPO             = props.NEXUS_REPO
-                    env.NEXUS_CREDENTIALS_ID   = props.NEXUS_CREDENTIALS_ID
-
-					echo "APPLICATION_REPOSITORY = ${env.APPLICATION_REPOSITORY}"
-					echo "APPLICATION_BRANCH     = ${env.APPLICATION_BRANCH}"
-
-                    echo "ENVIRONMENT            = ${env.ENVIRONMENT}"
-
-					echo "CF_API                 = ${env.CF_API}"
-                    echo "CF_ORG                 = ${env.CF_ORG}"
-                    echo "CF_SPACE               = ${env.CF_SPACE}"
-                    
-                    echo "CF_CREDENTIALS_ID      = ${env.CF_CREDENTIALS_ID}"
-
-                    echo "NEXUS_URL              = ${env.NEXUS_URL}"
-
-                    echo "NEXUS_REPO             = ${env.NEXUS_REPO}"
-                    
-				}
-			}
-		}
+=================================================
+"""
+        }
+    }
+}
 
         // ========================================================
         // CHECKOUT
@@ -393,17 +335,7 @@ pipeline {
                         echo "Checkout Application Repository"
                         echo "================================================="
 
-                        echo ""
-                        echo "Pipeline Repository:"
-                        echo "$PIPELINE_REPOSITORY"
-
-                        echo ""
-                        echo "Application Repository:"
-                        echo "$APPLICATION_REPOSITORY"
-
-                        echo ""
-                        echo "Branch:"
-                        echo "$APPLICATION_BRANCH"
+                        echo "Cloning ${APPLICATION_REPOSITORY}@${APPLICATION_BRANCH}"
 
                         rm -rf application
 
@@ -414,50 +346,18 @@ pipeline {
 
                         cd application
 
-                        echo ""
-                        echo "Application repository checked out"
-
-                        echo ""
-                        echo "Current directory:"
-                        pwd
-
-                        echo ""
-                        echo "Git status:"
-                        git status
-
-                        echo ""
-                        echo "Repository content:"
-                        ls -la
-
-                        echo ""
-                        echo "Checking package.json..."
-
-                        if [ ! -f package.json ]; then
-                            echo "ERROR: package.json not found"
-                            exit 1
-                        fi
-
-                        echo "OK - package.json found"
-
-                        echo ""
-                        echo "Checking mta.yaml..."
-
-                        if [ ! -f mta.yaml ]; then
-                            echo "ERROR: mta.yaml not found"
-                            exit 1
-                        fi
-
-                        echo "OK - mta.yaml found"
+                        echo "Checked out commit: $(git rev-parse --short HEAD)"
+                        
                     '''
                 }
             }
         }
 
         // ========================================================
-        // VERIFY ENVIRONMENT
+        // VERIFY TOOLCHAIN
         // ========================================================
 
-        stage('Verify Environment') {
+        stage('Verify Toolchain') {
 
             steps {
 
@@ -466,15 +366,8 @@ pipeline {
                     set -e
 
                     echo "================================================="
-                    echo "Verify Build Environment"
+                    echo "Verify Toolchain"
                     echo "================================================="
-
-                    echo ""
-                    echo "Deployment Environment"
-                    echo "Environment: $ENVIRONMENT"
-                    echo "CF API:      $CF_API"
-                    echo "CF ORG:      $CF_ORG" 
-                    echo "CF SPACE:    $CF_SPACE"
                     
                     echo ""
                     echo "Java"
@@ -521,7 +414,7 @@ pipeline {
                     yq --version
 
                     echo ""
-                    echo "Environment verification completed"
+                    echo "Toolchain verification completed"
 
                 '''
             }
@@ -544,174 +437,118 @@ pipeline {
                         echo "================================================="
                         echo "Validate CAP Project"
                         echo "================================================="
+                        
+                        # =================================================
+                        # REQUIRED FILES
+                        # =================================================
 
-                        echo ""
-                        echo "Current directory:"
-                        pwd
-
-                        echo ""
-                        echo "Repository content:"
-                        ls -la
-
-
-                        # ------------------------------------------------
-                        # package.json
-                        # ------------------------------------------------
-
-                        echo ""
-                        echo "Checking package.json..."
-
-                        if [ ! -f "package.json" ]; then
-
+                        [ -f "package.json" ] || {
                             echo "ERROR: package.json not found"
-
                             exit 1
+                        }
 
-                        fi
-
-                        echo "OK - package.json found"
-
-
-                        # ------------------------------------------------
-                        # mta.yaml
-                        # ------------------------------------------------
-
-                        echo ""
-                        echo "Checking mta.yaml..."
-
-                        if [ ! -f "mta.yaml" ]; then
-
-                            echo "ERROR: mta.yaml not found"
-
+                        [ -f "${MTA_FILE}" ] || {
+                            echo "ERROR: ${MTA_FILE} not found"
                             exit 1
+                        }
 
-                        fi
-
-                        echo "OK - mta.yaml found"
-
-
-                        # ------------------------------------------------
-                        # CAP directories
-                        # ------------------------------------------------
-
-                        echo ""
-                        echo "Checking CAP project structure..."
+                        echo "OK - package.json"
+                        echo "OK - ${MTA_FILE}"
 
 
-                        if [ ! -d "srv" ]; then
+                        # =================================================
+                        # CAP PROJECT STRUCTURE
+                        # =================================================
 
+                        [ -d "srv" ] || {
                             echo "ERROR: srv directory not found"
-
                             exit 1
+                        }
 
-                        fi
-
-                        echo "OK - srv directory found"
-
-
-                        if [ ! -d "db" ]; then
-
+                        [ -d "db" ] || {
                             echo "ERROR: db directory not found"
-
                             exit 1
+                        }
 
-                        fi
-
-                        echo "OK - db directory found"
-
+                        echo "OK - srv/"
+                        echo "OK - db/"
 
                         if [ -d "app" ]; then
-
-                            echo "OK - app directory found"
-
+                            echo "OK - app/"
                         else
-
-                            echo "INFO - app directory not found"
-
+                            echo "INFO - app/ not present"
                         fi
 
 
-                        # ------------------------------------------------
-                        # xs-security.json
-                        # ------------------------------------------------
-
-                        echo ""
-                        echo "Checking security configuration..."
-
+                        # =================================================
+                        # OPTIONAL SECURITY CONFIGURATION
+                        # =================================================
 
                         if [ -f "xs-security.json" ]; then
-
-                            echo "OK - xs-security.json found"
-
+                            echo "OK - xs-security.json"
                         else
-
-                            echo "WARNING - xs-security.json not found"
-
-                            echo "Continuing because it is optional"
-
+                            echo "INFO - xs-security.json not present (optional)"
                         fi
 
 
-                        # ------------------------------------------------
-                        # MTA validation
-                        # ------------------------------------------------
+                        # =================================================
+                        # MTA VALIDATION
+                        # =================================================
 
-                        echo ""
-                        echo "Validating mta.yaml..."
-
-                        MTA_ID=$(yq '.ID' "${MTA_FILE}")
+                        MTA_ID=$(yq -r '.ID' "${MTA_FILE}")
+                        MTA_VERSION=$(yq -r '.version' "${MTA_FILE}")
 
                         if [ -z "$MTA_ID" ] || [ "$MTA_ID" = "null" ]; then
-
                             echo "ERROR: Invalid MTA ID"
-
                             exit 1
-
                         fi
 
-                        echo "MTA ID: $MTA_ID"
+                        if [ -z "$MTA_VERSION" ] || [ "$MTA_VERSION" = "null" ]; then
+                            echo "ERROR: Invalid MTA version"
+                            exit 1
+                        fi
 
 
-                        MTA_VERSION=$(yq '.version' "${MTA_FILE}")
-
-                        echo "MTA version: $MTA_VERSION"
-
-
-                        # ------------------------------------------------
-                        # package.json validation
-                        # ------------------------------------------------
-
-                        echo ""
-                        echo "Validating package.json..."
+                        # =================================================
+                        # PACKAGE VALIDATION
+                        # =================================================
 
                         PACKAGE_NAME=$(jq -r '.name' package.json)
+                        PACKAGE_VERSION=$(jq -r '.version // empty' package.json)
 
-                        if [ "$PACKAGE_NAME" = "null" ]; then
-
+                        if [ -z "$PACKAGE_NAME" ] || [ "$PACKAGE_NAME" = "null" ]; then
                             echo "ERROR: package.json name not found"
-
                             exit 1
-
                         fi
 
-                        echo "Package name: $PACKAGE_NAME"
 
-
-                        # ------------------------------------------------
-                        # CDS validation
-                        # ------------------------------------------------
+                        # =================================================
+                        # CDS VALIDATION
+                        # =================================================
 
                         echo ""
-                        echo "Checking CDS project..."
+                        echo "Checking CDS configuration..."
 
-                        cds env
+                        cds env > /dev/null
 
+
+                        # =================================================
+                        # VALIDATION SUMMARY
+                        # =================================================
 
                         echo ""
                         echo "================================================="
+                        echo "CAP Project Validation Summary"
+                        echo "================================================="
+
+                        echo "Package:     $PACKAGE_NAME"
+                        echo "Version:     ${PACKAGE_VERSION:-not defined}"
+                        echo "MTA ID:      $MTA_ID"
+                        echo "MTA version: $MTA_VERSION"
+
+                        echo ""
                         echo "CAP project validation completed successfully"
                         echo "================================================="
-
                     '''
                 }
             }
@@ -788,60 +625,15 @@ stage('Semantic Release') {
 
                     sh '''
 
-                        set -e
+                        set +e
 
                         echo "================================================="
                         echo "Semantic Release"
                         echo "================================================="
 
-                        echo ""
-                        echo "Application repository:"
-                        echo "$APPLICATION_REPOSITORY"
-
-                        echo ""
-                        echo "Application branch:"
-                        echo "$APPLICATION_BRANCH"
-
-                        echo ""
-                        echo "================================================="
-                        echo "SEMANTIC RELEASE CONTEXT"
-                        echo "================================================="
-
-                        echo ""
-                        echo "Jenkins/Semantic BRANCH_NAME:"
-                        echo "$BRANCH_NAME"
-
-                        echo ""
-                        echo "GIT_BRANCH:"
-                        echo "${GIT_BRANCH:-<unset>}"
-
-                        echo ""
-                        echo "CHANGE_BRANCH:"
-                        echo "${CHANGE_BRANCH:-<unset>}"
-
-                        echo ""
-                        echo "Actual Git branch:"
-                        git branch --show-current
-
-                        echo ""
-                        echo "Git status:"
-                        git status --short
-
-                        echo ""
-                        echo "Git remote:"
-                        git remote -v
-
-                        echo ""
-                        echo "Git HEAD:"
-                        git rev-parse HEAD
-
-                        echo ""
-                        echo "package.json:"
-                        jq '.name, .version' package.json
-
-                        echo ""
-                        echo "Semantic release configuration:"
-                        jq '.release // empty' package.json
+                        echo "Repository: ${APPLICATION_REPOSITORY}"
+                        echo "Branch:     ${APPLICATION_BRANCH}"
+                        echo "Commit:     $(git rev-parse --short HEAD)"
 
                         echo ""
                         echo "================================================="
@@ -854,13 +646,20 @@ stage('Semantic Release') {
 
                         SEMANTIC_EXIT_CODE=$?
 
-                        echo ""
-                        echo "Semantic-release output:"
-                        cat semantic.log
+                        set -e
 
-                        echo ""
-                        echo "Semantic-release exit code:"
-                        echo "$SEMANTIC_EXIT_CODE"
+                        if [ "$SEMANTIC_EXIT_CODE" -ne 0 ]; then
+
+                            echo ""
+                            echo "ERROR: semantic-release failed"
+                            echo "Exit code: $SEMANTIC_EXIT_CODE"
+
+                            echo ""
+                            echo "Semantic-release output:"
+                            cat semantic.log
+
+                            exit "$SEMANTIC_EXIT_CODE"
+                        fi
 
 
                         # =================================================
@@ -994,7 +793,7 @@ stage('Semantic Release') {
 
              when {
                 expression {
-                    env.NO_RELEASE == 'false'
+                    env.NO_RELEASE != 'true'
                 }
             }
 
@@ -1073,33 +872,15 @@ stage('Semantic Release') {
                         mbt build -p cf -t "${MTAR_DIR}"
 
 
-                        echo ""
-
-                        echo "Generated artifacts:"
-
-                        ls -lah "${MTAR_DIR}"
-
-
-                        MTAR=$(
-
-                            find "${MTAR_DIR}" -name "*.mtar" | head -n 1)
-
+                        MTAR=$(find "${MTAR_DIR}" -name "*.mtar" | head -n 1)
 
                         if [ -z "$MTAR" ]; then
-
                             echo "ERROR: MTAR was not generated"
-
                             exit 1
-
                         fi
 
-
                         echo ""
-
-                        echo "MTAR generated successfully:"
-
-                        echo "$MTAR"
-
+                        echo "Generated artifact: $MTAR"
                     '''
                 }
             }
@@ -1188,7 +969,7 @@ stage('Semantic Release') {
             steps {
 
                 script {
-                    deployToEnvironment('dev')
+                    deployToEnvironment('env.ENVIRONMENT')
                 }
             }
         }
@@ -1322,12 +1103,6 @@ stage('Semantic Release') {
 
 
                             echo ""
-                            echo "Git status..."
-
-                            git status
-
-
-                            echo ""
                             echo "Commit..."
 
                             git add package.json package-lock.json mta.yaml
@@ -1340,7 +1115,7 @@ stage('Semantic Release') {
                             echo ""
                             echo "Create tag..."
 
-                            git tag -f "v$VERSION"
+                            git tag "v$VERSION"
 
 
                             echo ""
@@ -1358,7 +1133,7 @@ stage('Semantic Release') {
                             echo ""
                             echo "Push tag..."
 
-                            git push origin "v$VERSION" --force
+                            git push origin "v$VERSION"
 
 
                             echo ""
@@ -1382,25 +1157,26 @@ stage('Semantic Release') {
 
         success {
 
-            echo '''
+            script {
 
-            =================================================
-            CAP PIPELINE COMPLETED SUCCESSFULLY
-            =================================================
+                if (env.NO_RELEASE == 'true') {
 
-            '''
-        }
+                    echo '''
+=================================================
+CAP PIPELINE COMPLETED - NO NEW RELEASE
+=================================================
+'''
 
+                } else {
 
-        unstable {
-
-            echo '''
-
-            =================================================
-            CAP PIPELINE COMPLETED WITHOUT NEW RELEASE
-            =================================================
-
-            '''
+                    echo """
+=================================================
+CAP PIPELINE COMPLETED SUCCESSFULLY
+Release: ${env.VERSION}
+=================================================
+"""
+                }
+            }
         }
 
 
