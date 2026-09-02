@@ -867,8 +867,37 @@ stage('Semantic Release') {
             echo "Check Nexus Artifact"
             echo "================================================="
 
+            /*
+             * Derive the expected MTAR name before build.
+             *
+             * Example:
+             *   MTA_ID  = kupit-flexiblewf-cap
+             *   VERSION = 1.6.12
+             *
+             *   MTAR_NAME = kupit-flexiblewf-cap_1.6.12.mtar
+             */
+
+             dir(env.PROJECT_DIR) {
+
+                env.MTA_ID = sh(
+                    script: """
+                        yq -r '.ID' '${env.MTA_FILE}'
+                    """,
+                    returnStdout: true
+                ).trim()
+            }
+
+            if (!env.MTA_ID || env.MTA_ID == 'null') {
+                error("Unable to determine MTA ID from ${env.MTA_FILE}")
+            }
+
+            env.MTAR_NAME =
+                "${env.MTA_ID}_${env.VERSION}.mtar"
+
             env.ARTIFACT_PATH =
-                "cap/${env.APPLICATION_REPOSITORY}/${env.VERSION}/application.mtar"
+                "cap/${env.APPLICATION_REPOSITORY}/${env.VERSION}/${env.MTAR_NAME}"
+
+            echo "Expected artifact: ${env.MTAR_NAME}"
 
             withCredentials([
                 usernamePassword(
@@ -879,11 +908,12 @@ stage('Semantic Release') {
             ]) {
 
                 sh '''
-                    set -e
+                    set +e
 
                     NEXUS_TARGET="${NEXUS_URL}/repository/${NEXUS_REPO}/${ARTIFACT_PATH}"
 
                     echo "Version: $VERSION"
+                    echo "Artifact: $MTAR_NAME"
                     echo "Path:    $ARTIFACT_PATH"
 
                     HTTP_CODE=$(
@@ -895,6 +925,16 @@ stage('Semantic Release') {
                             --head \
                             "$NEXUS_TARGET"
                     )
+
+                    CURL_EXIT_CODE=$?
+
+                    if [ "$CURL_EXIT_CODE" -ne 0 ]; then
+                        echo ""
+                        echo "ERROR: Unable to connect to Nexus"
+                        echo "curl exit code: $CURL_EXIT_CODE"
+                        echo "HTTP status:    $HTTP_CODE"
+                        exit "$CURL_EXIT_CODE"
+                    fi
 
                     case "$HTTP_CODE" in
 
@@ -981,6 +1021,15 @@ stage('Semantic Release') {
                                 -name "*.mtar" |
                             head -n 1
                         )
+
+                        ACTUAL_MTAR_NAME=$(basename "$MTAR")
+
+                        if [ "$ACTUAL_MTAR_NAME" != "$MTAR_NAME" ]; then
+                            echo "ERROR: Unexpected MTAR name"
+                            echo "Expected: $MTAR_NAME"
+                            echo "Actual:   $ACTUAL_MTAR_NAME"
+                            exit 1
+                        fi
 
                         if [ -z "$MTAR" ]; then
                             echo "ERROR: MTAR was not generated"
@@ -1108,7 +1157,7 @@ EOF
                         rm -rf "$DOWNLOAD_DIR"
                         mkdir -p "$DOWNLOAD_DIR"
 
-                        DEPLOY_MTAR="${DOWNLOAD_DIR}/application.mtar"
+                        DEPLOY_MTAR="${DOWNLOAD_DIR}/${MTAR_NAME}"
 
                         NEXUS_TARGET="${NEXUS_URL}/repository/${NEXUS_REPO}/${ARTIFACT_PATH}"
 
